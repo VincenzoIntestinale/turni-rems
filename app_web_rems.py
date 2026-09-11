@@ -169,24 +169,24 @@ with tab1:
     st.markdown(html_tab, unsafe_allow_html=True)
     
     if st.button("🖨️ Apri e Stampa PDF Tabellone", key="univoco_key_pdf_tab", use_container_width=True):
-        path_tab = os.path.join(os.path.expanduser("~"), "Desktop", "Tabellone_Turni_REMS.pdf")
-        doc = SimpleDocTemplate(path_tab, pagesize=landscape(letter), leftMargin=20, rightMargin=20, topMargin=20, bottomMargin=20)
-        elements = list()
-        styles = getSampleStyleSheet()
-        t_st = ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=15)
-        c_st = ParagraphStyle('C', fontName='Helvetica', fontSize=8, alignment=1)
-        h_st = ParagraphStyle('H', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.white)
+                # Salviamo il file in una cartella temporanea del server web
+        path_tab = "Tabellone_Turni_REMS.pdf"
+        doc_tab = SimpleDocTemplate(path_tab, pagesize=landscape(letter), leftMargin=20, rightMargin=20, topMargin=20, bottomMargin=20)
+        elements_tab = list()
+        styles_tab = getSampleStyleSheet()
+        t_st_tab = ParagraphStyle('T_Tab', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=15)
+        c_st_tab = ParagraphStyle('C_Tab', fontName='Helvetica', fontSize=8, alignment=1)
+        h_st_tab = ParagraphStyle('H_Tab', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.white)
         
-        # Intestazione richiesta per il Tabellone
-        d_inizio = date_sett[0].strftime('%d/%m/%Y')
+        d_inizio = date_sett.strftime('%d/%m/%Y')
         d_fine = date_sett[-1].strftime('%d/%m/%Y')
-        elements.append(Paragraph(f"PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {d_inizio} AL {d_fine}", t_st))
+        elements_tab.append(Paragraph(f"PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {d_inizio} AL {d_fine}", t_st_tab))
         
         giorni_lista_local = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
-        headers_pdf = [Paragraph("Fascia Oraria", h_st)]
+        headers_pdf = [Paragraph("Fascia Oraria", h_st_tab)]
         for i, d in enumerate(date_sett):
             giorno_testo_col = giorni_lista_local[i]
-            headers_pdf.append(Paragraph(f"{giorno_testo_col} {d.strftime('%d/%m')}", h_st))
+            headers_pdf.append(Paragraph(f"{giorno_testo_col} {d.strftime('%d/%m')}", h_st_tab))
             
         data_pdf = list()
         data_pdf.append(headers_pdf)
@@ -202,7 +202,7 @@ with tab1:
                 
             for s in range(MAX_SLOTS):
                 f_txt = testo_orario if s == 2 else ""
-                r = [Paragraph(f_txt, ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=8, alignment=1))]
+                r = [Paragraph(f_txt, ParagraphStyle('F_Tab', fontName='Helvetica-Bold', fontSize=8, alignment=1))]
                 
                 for dt in date_sett:
                     v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
@@ -210,19 +210,27 @@ with tab1:
                     if " " in testo_pulito:
                         parti_nome = testo_pulito.split(" ", 1)
                         testo_pulito = f"{parti_nome[0]}<br/>{parti_nome[1]}"
-                    r.append(Paragraph(testo_pulito, c_st))
+                    r.append(Paragraph(testo_pulito, c_st_tab))
                 data_pdf.append(r)
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-                # 100 punti alla prima colonna e 95 punti per ciascuno dei 7 giorni
         w_cols = [100, 95, 95, 95, 95, 95, 95, 95]
-        t = Table(data_pdf, colWidths=w_cols)
-        t.setStyle(TableStyle(r_styles))
-        elements.append(t)
-        doc.build(elements)
-        os.startfile(path_tab)
-        st.success("PDF Tabellone aperto sul Desktop!")
+        t_table = Table(data_pdf, colWidths=w_cols)
+        t_table.setStyle(TableStyle(r_styles))
+        elements_tab.append(t_table)
+        doc_tab.build(elements_tab)
+        
+        # Mette a disposizione il file pronto per scaricarlo o stamparlo dal browser
+        with open(path_tab, "rb") as file:
+            st.download_button(
+                label="📥 Scarica / Stampa il PDF del Tabellone",
+                data=file,
+                file_name="Tabellone_Turni_REMS.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+
 with tab2:
     st.markdown("<h3 style='text-align:center;'>REPORT CONTEGGI ORE</h3>", unsafe_allow_html=True)
     
@@ -253,20 +261,19 @@ with tab2:
     st.markdown(html_rep, unsafe_allow_html=True)
     
     if st.button("📊 Apri e Stampa PDF Report Ore", key="univoco_key_pdf_rep", use_container_width=True):
-        path_rep = os.path.join(os.path.expanduser("~"), "Desktop", "Report_Ore_REMS.pdf")
-        doc = SimpleDocTemplate(path_rep, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
-        elements = list()
-        styles = getSampleStyleSheet()
-        t_st = ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=20)
-        c_st = ParagraphStyle('C', fontName='Helvetica', fontSize=9, alignment=1)
-        h_st = ParagraphStyle('H', fontName='Helvetica-Bold', fontSize=10, alignment=1, textColor=colors.white)
+                path_rep = "Report_Ore_REMS.pdf"
+        doc_rep = SimpleDocTemplate(path_rep, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
+        elements_rep = list()
+        styles_rep = getSampleStyleSheet()
+        t_st_rep = ParagraphStyle('T_Rep', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=20)
+        c_st_rep = ParagraphStyle('C_Rep', fontName='Helvetica', fontSize=9, alignment=1)
+        h_st_rep = ParagraphStyle('H_Rep', fontName='Helvetica-Bold', fontSize=10, alignment=1, textColor=colors.white)
         
-        # Nuova Intestazione speculare richiesta applicata al Report
-        data_inizio = date_sett[0].strftime('%d/%m/%Y')
+        data_inizio = date_sett.strftime('%d/%m/%Y')
         data_fine = date_sett[-1].strftime('%d/%m/%Y')
-        elements.append(Paragraph(f" REPORT PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {data_inizio} AL {data_fine}", t_st))
+        elements_rep.append(Paragraph(f"REPORT - PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {data_inizio} AL {data_fine}", t_st_rep))
         
-        headers_pdf = [Paragraph("OPERATORE", h_st), Paragraph("ORE S.", h_st), Paragraph("PREV.", h_st), Paragraph("EFF.", h_st), Paragraph("GIORNI", h_st), Paragraph("ORE TOT.", h_st)]
+        headers_pdf = [Paragraph("OPERATORE", h_st_rep), Paragraph("ORE S.", h_st_rep), Paragraph("PREV.", h_st_rep), Paragraph("EFF.", h_st_rep), Paragraph("GIORNI", h_st_rep), Paragraph("ORE TOT.", h_st_rep)]
         data_pdf = list()
         data_pdf.append(headers_pdf)
         
@@ -280,15 +287,14 @@ with tab2:
                 
             if reg > 0:
                 data_pdf.append([
-                    Paragraph(op_impaginato, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),
-                    Paragraph(str(ore_g), c_st), Paragraph(str(da_f), c_st), Paragraph(str(reg), c_st),
-                    Paragraph(stringa_g, c_st), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
+                    Paragraph(op_impaginato, ParagraphStyle('L_Rep', fontName='Helvetica', fontSize=9, alignment=0)),
+                    Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
+                    Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B_Rep', fontName='Helvetica-Bold', fontSize=9, alignment=1))
                 ])
                 
-                # Larghezze: 140 operatore, 55 ore s., 55 prev., 55 eff., 120 giorni, 75 ore tot.
         w_rep = [140, 55, 55, 55, 120, 75]
-        t = Table(data_pdf, colWidths=w_rep)
-        t.setStyle(TableStyle([
+        t_rep = Table(data_pdf, colWidths=w_rep)
+        t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")),
             ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -296,8 +302,17 @@ with tab2:
             ('BOTTOMPADDING', (0,0), (-1,-1), 6),
             ('TOPPADDING', (0,0), (-1,-1), 6)
         ]))
-        elements.append(t)
-        doc.build(elements)
-        os.startfile(path_rep)
-        st.success("PDF Report Ore aperto sul Desktop!")
+        elements_rep.append(t_rep)
+        doc_rep.build(elements_rep)
+        
+        # Mette a disposizione il file pronto per scaricarlo o stamparlo dal browser
+        with open(path_rep, "rb") as file:
+            st.download_button(
+                label="📥 Scarica / Stampa il PDF del Report Ore",
+                data=file,
+                file_name="Report_Ore_REMS.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+
 
