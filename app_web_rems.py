@@ -1,19 +1,12 @@
-import os, sys, sqlite3, subprocess
-from datetime import datetime, timedelta
-
-def installa_se_mancante(package):
-    try:
-        __import__(package)
-    except ImportError:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-installa_se_mancante("customtkinter")
-try:
-    __import__("reportlab")
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "reportlab"])
-
+# INCOLLA QUESTO BLOCCO NUOVO AL SUO POSTO:
+import os
+import sqlite3
 import streamlit as st
+from datetime import datetime, timedelta
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
