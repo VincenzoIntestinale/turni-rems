@@ -178,8 +178,9 @@ with tab1:
         c_st_tab = ParagraphStyle('C_Tab', fontName='Helvetica', fontSize=8, alignment=1)
         h_st_tab = ParagraphStyle('H_Tab', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.white)
         
-        d_inizio = date_sett.strftime('%d/%m/%Y')
+        d_inizio = date_sett[0].strftime('%d/%m/%Y')
         d_fine = date_sett[-1].strftime('%d/%m/%Y')
+
         elements_tab.append(Paragraph(f"PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {d_inizio} AL {d_fine}", t_st_tab))
         
         giorni_lista_local = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
@@ -269,8 +270,9 @@ with tab2:
     c_st_rep = ParagraphStyle('C_Rep', fontName='Helvetica', fontSize=9, alignment=1)
     h_st_rep = ParagraphStyle('H_Rep', fontName='Helvetica-Bold', fontSize=10, alignment=1, textColor=colors.white)
         
-    data_inizio = date_sett.strftime('%d/%m/%Y')
+    data_inizio = date_sett[0].strftime('%d/%m/%Y')
     data_fine = date_sett[-1].strftime('%d/%m/%Y')
+
     elements_rep.append(Paragraph(f"REPORT - PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {data_inizio} AL {data_fine}", t_st_rep))
         
     headers_pdf = [Paragraph("OPERATORE", h_st_rep), Paragraph("ORE S.", h_st_rep), Paragraph("PREV.", h_st_rep), Paragraph("EFF.", h_st_rep), Paragraph("GIORNI", h_st_rep), Paragraph("ORE TOT.", h_st_rep)]
