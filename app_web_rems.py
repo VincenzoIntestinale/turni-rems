@@ -40,7 +40,7 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# Connessione nativa SQL locale/remota
+# Connessione nativa SQL integrata
 conn = st.connection("sql")
 
 with conn.session as session:
@@ -96,7 +96,6 @@ with form_inserimento:
                     dizionario_scelte[k_g][fas].append(scelta)
                     
     tasto_salva = st.form_submit_button("💾 SALVA E AGGIORNA TABELLONE", use_container_width=True)
-
 if tasto_salva:
     try:
         with conn.session as session:
@@ -111,8 +110,7 @@ if tasto_salva:
                         if scelta_attuale != "- Vuoto -":
                             session.execute("INSERT INTO turni_rems (chiave, operatore) VALUES (:chiave, :operatore);", {"chiave": chiave_unica, "operatore": scelta_attuale})
             session.commit()
-        st.success("💾 Turni della settimana archiviati con successo!")
-        st.rerun()
+        st.success("💾 Turni della settimana archiviati con successo! Ricarica la pagina per visualizzarli.")
     except Exception as e:
         st.error(f"Errore durante il salvataggio: {e}")
 
