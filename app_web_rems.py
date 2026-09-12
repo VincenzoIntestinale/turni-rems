@@ -22,21 +22,16 @@ if "data_ancora" not in st.session_state:
     oggi = datetime.now()
     st.session_state.data_ancora = oggi - timedelta(days=oggi.weekday())
 
-if "dati_locali" not in st.session_state:
-    st.session_state.dati_locali = {}
-
 col_prev, col_testo, col_next = st.columns()
 
 with col_prev:
     if st.button("◀ Settimana Prec.", key="nav_sf_prev", use_container_width=True):
         st.session_state.data_ancora -= timedelta(days=7)
-        st.session_state.dati_locali.clear()
         st.rerun()
 
 with col_next:
     if st.button("Settimana Succ. ▶", key="nav_sf_next", use_container_width=True):
         st.session_state.data_ancora += timedelta(days=7)
-        st.session_state.dati_locali.clear()
         st.rerun()
 
 date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
@@ -47,9 +42,6 @@ with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
 def carica_turni_settimana(date_list):
-    if st.session_state.dati_locali:
-        return st.session_state.dati_locali
-        
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
@@ -61,21 +53,18 @@ def carica_turni_settimana(date_list):
                     parti = ch.split("_")
                     g_data = parti[0]
                     if g_data in dati:
-                        f_orario = f"{parti[1]}-{parti[2]}"
-                        f_orario = f_orario.replace("09:00", "09:00 - 14:00").replace("15:00", "15:00 - 20:00")
+                        f_orario = f"{parti[1]}-{parti[2]}".replace("09:00", "09:00 - 14:00").replace("15:00", "15:00 - 20:00")
                         s_idx = int(parti[3])
                         if f_orario in dati[g_data] and s_idx < MAX_SLOTS:
                             dati[g_data][f_orario][s_idx] = op
     except Exception:
         pass
-    st.session_state.dati_locali = dati
     return dati
 
-def salva_turno_db(data_g, fascia, slot, operatore):
+# Funzione di salvataggio automatico agganciata all'evento web
+def salva_turno_callback(key_selezionata, data_g, fascia, slot):
     try:
-        # Aggiorna istantaneamente la memoria locale per bloccare il loop
-        st.session_state.dati_locali[data_g][fascia][slot] = operatore
-        
+        operatore = st.session_state[key_selezionata]
         conn = st.connection("gsheets", type=GSheetsConnection)
         df = conn.read(ttl=0)
         if df is None or df.empty:
@@ -110,10 +99,18 @@ for idx, dt in enumerate(date_sett):
             for s in range(MAX_SLOTS):
                 v_salvato = dati_turni[k_g][fas][s]
                 def_idx = lista_ops.index(v_salvato) if v_salvato in lista_ops else 0
-                scelta = st.selectbox(f"h_{k_g}_{fas}_{s}", options=lista_ops, index=def_idx, key=f"w_sel_{k_g}_{fas}_{s}", label_visibility="collapsed")
-                if scelta != v_salvato:
-                    salva_turno_db(k_g, fas, s, scelta)
-                    st.rerun()
+                
+                # Usiamo on_change per salvare in background senza ricaricare la pagina
+                chiave_univoca_widget = f"w_sel_{k_g}_{fas}_{s}"
+                st.selectbox(
+                    label=f"h_{k_g}_{fas}_{s}", 
+                    options=lista_ops, 
+                    index=def_idx, 
+                    key=chiave_univoca_widget, 
+                    label_visibility="collapsed",
+                    on_change=salva_turno_callback,
+                    args=(chiave_univoca_widget, k_g, fas, s)
+                )
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
