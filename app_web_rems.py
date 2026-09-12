@@ -16,7 +16,7 @@ DB_OPERATORI = {
 FASCE = ["09:00 - 14:00", "15:00 - 20:00"]
 MAX_SLOTS = 5
 
-# Database integrato e protetto nel Cloud di Streamlit (Non va mai in loop)
+# Memoria di archiviazione centralizzata sicura
 if "db_remoto_turni" not in st.session_state:
     st.session_state.db_remoto_turni = {}
 
@@ -24,7 +24,7 @@ if "data_ancora" not in st.session_state:
     oggi = datetime.now()
     st.session_state.data_ancora = oggi - timedelta(days=oggi.weekday())
 
-col_prev, col_testo, col_next = st.columns()
+col_prev, col_testo, col_next = st.columns([1, 2, 1])
 
 with col_prev:
     if st.button("◀ Settimana Prec.", key="nav_sf_prev", use_container_width=True):
@@ -43,55 +43,53 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# Funzione di caricamento istantanea dalla memoria sicura
-def carica_turni_settimana(date_list):
-    dati = {}
-    for dt in date_list:
-        k_g = dt.strftime("%Y-%m-%d")
-        dati[k_g] = {}
-        for fas in FASCE:
-            dati[k_g][fas] = []
-            for s in range(MAX_SLOTS):
-                chiave_univoca = f"{k_g}_{fas}_{s}"
-                if chiave_univoca in st.session_state.db_remoto_turni:
-                    dati[k_g][fas].append(st.session_state.db_remoto_turni[chiave_univoca])
-                else:
-                    dati[k_g][fas].append("- Vuoto -")
-    return dati
+# Funzione di salvataggio in background (Eliminato st.rerun per bloccare il loop)
+def salva_turno_callback(chiave_univoca):
+    nuovo_valore = st.session_state[chiave_univoca]
+    st.session_state.db_remoto_turni[chiave_univoca] = nuovo_valore
 
-dati_turni = carica_turni_settimana(date_sett)
+# Caricamento dati immediato
+dati_turni = {}
+for dt in date_sett:
+    k_g = dt.strftime("%Y-%m-%d")
+    dati_turni[k_g] = {}
+    for fas in FASCE:
+        dati_turni[k_g][fas] = []
+        for s in range(MAX_SLOTS):
+            ch = f"{k_g}_{fas}_{s}"
+            if ch in st.session_state.db_remoto_turni:
+                dati_turni[k_g][fas].append(st.session_state.db_remoto_turni[ch])
+            else:
+                dati_turni[k_g][fas].append("- Vuoto -")
+
 lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
 g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-# Griglia interattiva liscia e senza blocchi
+# Disegno della griglia interattiva stabile
 colonne_giorni = st.columns(7)
-dizionario_scelte = {}
-
 for idx, dt in enumerate(date_sett):
     k_g = dt.strftime("%Y-%m-%d")
-    dizionario_scelte[k_g] = {}
-    
     with colonne_giorni[idx]:
         st.markdown(f"<div style='text-align:center; background-color:#1F538D; padding:8px; border-radius:6px; color:white; font-family:Arial; font-size:13px; font-weight:bold;'>{g_nomi[idx]}<br/>{dt.strftime('%d/%m')}</div>", unsafe_allow_html=True)
         for fas in FASCE:
             bg_c = "#FFF1E0" if "09:00" in fas else "#F3E5F5"
             st.markdown(f"<div style='background-color:{bg_c}; padding:4px; margin-top:8px; border-radius:4px; text-align:center; font-size:11px; font-weight:bold; color:#333; font-family:Arial;'>🕒 {fas}</div>", unsafe_allow_html=True)
-            dizionario_scelte[k_g][fas] = []
-            
             for s in range(MAX_SLOTS):
-                valore_salvato = dati_turni[k_g][fas][s]
-                def_idx = lista_ops.index(valore_salvato) if valore_salvato in lista_ops else 0
+                v_salvato = dati_turni[k_g][fas][s]
+                def_idx = lista_ops.index(v_salvato) if v_salvato in lista_ops else 0
                 
-                # Al cambio del nome salviamo all'istante senza ricaricare la pagina internet
-                scelta = st.selectbox(f"h_{k_g}_{fas}_{s}", options=lista_ops, index=def_idx, key=f"w_sel_{k_g}_{fas}_{s}", label_visibility="collapsed")
-                dizionario_scelte[k_g][fas].append(scelta)
-                
-                chiave_univoca = f"{k_g}_{fas}_{s}"
-                if scelta != valore_salvato:
-                    st.session_state.db_remoto_turni[chiave_univoca] = scelta
-                    st.rerun()
+                ch_widget = f"{k_g}_{fas}_{s}"
+                st.selectbox(
+                    label=f"h_{k_g}_{fas}_{s}", 
+                    options=lista_ops, 
+                    index=def_idx, 
+                    key=ch_widget, 
+                    label_visibility="collapsed",
+                    on_change=salva_turno_callback,
+                    args=(ch_widget,)
+                )
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
