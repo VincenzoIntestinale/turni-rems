@@ -61,56 +61,64 @@ def carica_turni_settimana(date_list):
         pass
     return dati
 
-# Funzione di salvataggio automatico agganciata all'evento web
-def salva_turno_callback(key_selezionata, data_g, fascia, slot):
-    try:
-        operatore = st.session_state[key_selezionata]
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df = conn.read(ttl=0)
-        if df is None or df.empty:
-            df = pd.DataFrame(columns=["chiave", "operatore"])
-            
-        f_p = fascia.replace(" ", "").split("-")
-        f_pulita = f"{f_p[0]}_{f_p[1]}"
-        chiave_unica = f"{data_g}_{f_pulita}_{slot}"
-        
-        df = df[df["chiave"].astype(str).str.strip() != chiave_unica]
-        if operatore != "- Vuoto -":
-            nuova_riga = pd.DataFrame([{"chiave": chiave_unica, "operatore": operatore}])
-            df = pd.concat([df, nuova_riga], ignore_index=True)
-        conn.update(data=df)
-    except Exception:
-        pass
-
 dati_turni = carica_turni_settimana(date_sett)
 lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
 g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-colonne_giorni = st.columns(7)
-for idx, dt in enumerate(date_sett):
-    k_g = dt.strftime("%Y-%m-%d")
-    with colonne_giorni[idx]:
-        st.markdown(f"<div style='text-align:center; background-color:#1F538D; padding:8px; border-radius:6px; color:white; font-family:Arial; font-size:13px; font-weight:bold;'>{g_nomi[idx]}<br/>{dt.strftime('%d/%m')}</div>", unsafe_allow_html=True)
-        for fas in FASCE:
-            bg_c = "#FFF1E0" if "09:00" in fas else "#F3E5F5"
-            st.markdown(f"<div style='background-color:{bg_c}; padding:4px; margin-top:8px; border-radius:4px; text-align:center; font-size:11px; font-weight:bold; color:#333; font-family:Arial;'>🕒 {fas}</div>", unsafe_allow_html=True)
-            for s in range(MAX_SLOTS):
-                v_salvato = dati_turni[k_g][fas][s]
-                def_idx = lista_ops.index(v_salvato) if v_salvato in lista_ops else 0
+form_inserimento = st.form(key="blocco_inserimento_turni")
+with form_inserimento:
+    colonne_giorni = st.columns(7)
+    dizionario_scelte = {}
+    
+    for idx, dt in enumerate(date_sett):
+        k_g = dt.strftime("%Y-%m-%d")
+        dizionario_scelte[k_g] = {}
+        
+        with colonne_giorni[idx]:
+            st.markdown(f"<div style='text-align:center; background-color:#1F538D; padding:8px; border-radius:6px; color:white; font-family:Arial; font-size:13px; font-weight:bold;'>{g_nomi[idx]}<br/>{dt.strftime('%d/%m')}</div>", unsafe_allow_html=True)
+            for fas in FASCE:
+                bg_c = "#FFF1E0" if "09:00" in fas else "#F3E5F5"
+                st.markdown(f"<div style='background-color:{bg_c}; padding:4px; margin-top:8px; border-radius:4px; text-align:center; font-size:11px; font-weight:bold; color:#333; font-family:Arial;'>🕒 {fas}</div>", unsafe_allow_html=True)
+                dizionario_scelte[k_g][fas] = []
                 
-                # Usiamo on_change per salvare in background senza ricaricare la pagina
-                chiave_univoca_widget = f"w_sel_{k_g}_{fas}_{s}"
-                st.selectbox(
-                    label=f"h_{k_g}_{fas}_{s}", 
-                    options=lista_ops, 
-                    index=def_idx, 
-                    key=chiave_univoca_widget, 
-                    label_visibility="collapsed",
-                    on_change=salva_turno_callback,
-                    args=(chiave_univoca_widget, k_g, fas, s)
-                )
+                for s in range(MAX_SLOTS):
+                    v_salvato = dati_turni[k_g][fas][s]
+                    def_idx = lista_ops.index(v_salvato) if v_salvato in lista_ops else 0
+                    
+                    scelta = st.selectbox(f"h_{k_g}_{fas}_{s}", options=lista_ops, index=def_idx, key=f"w_sel_{k_g}_{fas}_{s}", label_visibility="collapsed")
+                    dizionario_scelte[k_g][fas].append(scelta)
+                    
+    tasto_salva = st.form_submit_button("💾 SALVA E AGGIORNA TABELLONE", use_container_width=True)
+if tasto_salva:
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(ttl=0)
+        if df is None or df.empty:
+            df = pd.DataFrame(columns=["chiave", "operatore"])
+            
+        for k_g in dizionario_scelte.keys():
+            for fas in FASCE:
+                f_p = fas.replace(" ", "").split("-")
+                f_pulita = f"{f_p[0]}_{f_p[1]}"
+                
+                for s in range(MAX_SLOTS):
+                    chiave_unica = f"{k_g}_{f_pulita}_{s}"
+                    scelta_attuale = dizionario_scelte[k_g][fas][s]
+                    
+                    df = df[df["chiave"].astype(str).str.strip() != chiave_unica]
+                    
+                    if scelta_attuale != "- Vuoto -":
+                        nuova_riga = pd.DataFrame([{"chiave": chiave_unica, "operatore": scelta_attuale}])
+                        df = pd.concat([df, nuova_riga], ignore_index=True)
+                        
+        conn.update(data=df)
+        st.success("💾 Turni della settimana archiviati con successo!")
+        st.rerun()
+    except Exception as e:
+        st.error(f"Errore durante il salvataggio: {e}")
+
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
@@ -129,7 +137,11 @@ with tab1:
             html_tab += f"<tr style='background-color:{bg}; text-align:center;'><td style='padding:6px; border:1px solid #ddd; font-size:11px;'>{f_txt}</td>"
             for dt in date_sett:
                 v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
-                v_p = f"{v.split(' ')[0]}<br/>{v.split(' ')[1]}" if " " in v and v != "- Vuoto -" else (v if v != "- Vuoto -" else "")
+                if " " in v and v != "- Vuoto -":
+                    parti_nome = v.split(" ", 1)
+                    v_p = f"{parti_nome[0]}<br/>{parti_nome[1]}"
+                else:
+                    v_p = v if v != "- Vuoto -" else ""
                 html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black;'>{v_p}</td>"
             html_tab += "</tr>"
     html_tab += "</table></div>"
@@ -149,13 +161,18 @@ with tab2:
                 if op in t_c:
                     t_c[op] += 1
                     if g_n_it[idx] not in g_i[op]: g_i[op].append(g_n_it[idx])
+                    
     html_rep = f"<div id='sez_stampa_rep'><h2 style='text-align:center; font-family:Arial; color:#1F538D;'>REPORT - PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {lun_str} AL {dom_str}</h2>"
     html_rep += "<table style='width:100%; border-collapse:collapse; font-family:Arial;'><tr style='background-color:#1F538D; color:white;'><th style='padding:10px;'>OPERATORE</th><th style='padding:10px;'>ORE S.</th><th style='padding:10px;'>PREV.</th><th style='padding:10px;'>EFF.</th><th style='padding:10px;'>GIORNI IMPIEGATI</th><th style='padding:10px;'>ORE TOTALI</th></tr>"
     for op, (ore_g, da_f) in DB_OPERATORI.items():
         reg = t_c[op]
         sg = ", ".join(g_i[op]) if g_i[op] else "-"
         if reg > 0:
-            op_p = f"{op.split(' ')[0]}<br/>{op.split(' ')[1]}" if " " in op else op
+            if " " in op:
+                parti_op = op.split(" ", 1)
+                op_p = f"{parti_op[0]}<br/>{parti_op[1]}"
+            else:
+                op_p = op
             html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{reg}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D; font-size:12px;'><b>{reg*ore_g} ore</b></td></tr>"
     html_rep += "</table></div>"
     st.markdown(html_rep, unsafe_allow_html=True)
@@ -171,3 +188,4 @@ st.markdown("""
 }
 </style>
 """, unsafe_allow_html=True)
+
