@@ -24,7 +24,8 @@ if "data_ancora" not in st.session_state:
 if "matrice_turni" not in st.session_state:
     st.session_state.matrice_turni = {}
 
-col_prev, col_testo, col_next = st.columns()
+# CORRETTO: Inserite le proporzioni delle colonne per evitare il TypeError
+col_prev, col_testo, col_next = st.columns([1, 2, 1])
 
 with col_prev:
     if st.button("◀ Settimana Prec.", key="nav_sf_prev", use_container_width=True):
@@ -36,14 +37,17 @@ with col_next:
         st.session_state.data_ancora += timedelta(days=7)
         st.rerun()
 
-date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
+# CORRETTO: Ripristinate le parentesi quadre della lista giorni
+date_sett = []
+for i in range(7):
+    date_sett.append(st.session_state.data_ancora + timedelta(days=i))
+
 lun_str = date_sett[0].strftime('%d/%m/%Y')
 dom_str = date_sett[-1].strftime('%d/%m/%Y')
 
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# Inizializzazione della memoria locale ultrarapida
 dati_turni = {}
 for dt in date_sett:
     k_g = dt.strftime("%Y-%m-%d")
@@ -62,9 +66,8 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-# Pannello per caricare un vecchio file salvato, se esistente
 st.sidebar.markdown("### 📂 Ripristina Turni")
-file_caricato = st.sidebar.file_saver = st.sidebar.file_uploader("Carica file turni (.csv)", type=["csv"])
+file_caricato = st.sidebar.file_uploader("Carica file turni (.csv)", type=["csv"])
 if file_caricato is not None:
     try:
         df_caricato = pd.read_csv(file_caricato)
@@ -74,7 +77,6 @@ if file_caricato is not None:
     except Exception:
         pass
 
-# Funzione attivata al cambio dei menu a tendina
 def cambio_turno_evento(chiave_matrice):
     st.session_state.matrice_turni[chiave_matrice] = st.session_state[f"widget_{chiave_matrice}"]
 
@@ -149,7 +151,7 @@ with tab1:
 
 with tab2:
     t_c = {n: 0 for n in DB_OPERATORI.keys()}
-    g_i = {n: list() for n in DB_OPERATORI.keys()}
+    g_i = {n: [] for n in DB_OPERATORI.keys()}
     g_n_it = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
     for idx, dt in enumerate(date_sett):
         k_g = dt.strftime("%Y-%m-%d")
