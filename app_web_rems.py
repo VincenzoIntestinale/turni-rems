@@ -1,6 +1,6 @@
 import os
-import sqlite3
 import streamlit as st
+import pandas as pd
 from datetime import datetime, timedelta
 from streamlit_gsheets import GSheetsConnection
 
@@ -57,17 +57,18 @@ def carica_turni_settimana(date_list):
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         df = conn.read(ttl=0)
-        for _, row in df.iterrows():
-            ch = str(row["chiave"])
-            op = str(row["operatore"])
-            if "_" in ch:
-                parti = ch.split("_")
-                g_data = parti[0]
-                if g_data in dati:
-                    f_orario = parti[1] + " - " + parti[2]
-                    s_idx = int(parti[3])
-                    if f_orario in dati[g_data] and s_idx < MAX_SLOTS:
-                        dati[g_data][f_orario][s_idx] = op
+        if df is not None and not df.empty:
+            for _, row in df.iterrows():
+                ch = str(row["chiave"]).strip()
+                op = str(row["operatore"]).strip()
+                if "_" in ch:
+                    parti = ch.split("_")
+                    g_data = parti[0]
+                    if g_data in dati:
+                        f_orario = parti[1] + " - " + parti[2]
+                        s_idx = int(parti[3])
+                        if f_orario in dati[g_data] and s_idx < MAX_SLOTS:
+                            dati[g_data][f_orario][s_idx] = op
     except Exception:
         pass
     return dati
@@ -76,13 +77,13 @@ def salva_turno_db(data_g, fascia, slot, operatore):
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         df = conn.read(ttl=0)
+        if df is None or df.empty:
+            df = pd.DataFrame(columns=["chiave", "operatore"])
         f_p = fascia.replace(" ", "").split("-")
         f_pulita = f_p[0] + "_" + f_p[1]
         chiave_unica = f"{data_g}_{f_pulita}_{slot}"
-        
-        df = df[df["chiave"] != chiave_unica]
+        df = df[df["chiave"].astype(str).str.strip() != chiave_unica]
         if operatore != "- Vuoto -":
-            import pandas as pd
             nuova_riga = pd.DataFrame([{"chiave": chiave_unica, "operatore": operatore}])
             df = pd.concat([df, nuova_riga], ignore_index=True)
         conn.update(data=df)
@@ -211,7 +212,7 @@ with tab1:
         
         with open(path_tab, "rb") as file:
             st.download_button(
-                label="📥 Scarica / Stampa il PDF del Tabellone",
+                label="📥 Scarica il PDF del Tabellone",
                 data=file,
                 file_name="Tabellone_Turni_REMS.pdf",
                 mime="application/pdf",
@@ -316,10 +317,10 @@ with tab2:
         
         with open(path_rep, "rb") as file:
             st.download_button(
-                label="📥 Scarica / Stampa il PDF del Report Ore",
+                label="📥 Scarica il PDF del Report Ore",
                 data=file,
-                file_name="Report_Ore_REMS.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-                key="dl_rep_univoco"
-                )
+file_name="Report_Ore_REMS.pdf",
+mime="application/pdf",
+use_container_width=True,
+key="dl_rep_univoco"
+)
