@@ -1,12 +1,9 @@
-# INCOLLA QUESTO BLOCCO NUOVO AL SUO POSTO:
 import os
 import sqlite3
 import streamlit as st
 from datetime import datetime, timedelta
-from reportlab.lib.pagesizes import letter, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
+from streamlit_gsheets import GSheetsConnection
+
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -25,22 +22,6 @@ DB_OPERATORI = {
 }
 FASCE = ["09:00 - 14:00", "15:00 - 20:00"]
 MAX_SLOTS = 5
-
-def init_db():
-    conn = sqlite3.connect("database_turni_rems.db")
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS turni (
-            data_giorno TEXT, fascia TEXT, slot_index INTEGER, operatore TEXT,
-            PRIMARY KEY (data_giorno, fascia, slot_index)
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-if "turni_memorizzati" not in st.secrets:
-    st.error("Configura i Secrets sul pannello web prima di continuare!")
-    st.stop()
 
 if "data_ancora" not in st.session_state:
     oggi = datetime.now()
@@ -70,39 +51,43 @@ with col_testo:
 
 def carica_turni_settimana(date_list):
     dati = {}
-    # Legge i dati direttamente dall'archivio sicuro del cloud
-    archivio = st.secrets["turni_memorizzati"]
     for dt in date_list:
         k_g = dt.strftime("%Y-%m-%d")
         dati[k_g] = {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE}
-        for fas in FASCE:
-            for s_idx in range(MAX_SLOTS):
-                # Genera una chiave di testo unica per ogni singola casella
-                chiave_db = f"{k_g}_{fas}_{s_idx}"
-                if chiave_db in archivio:
-                    dati[k_g][fas][s_idx] = archivio[chiave_db]
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(ttl=0)
+        for _, row in df.iterrows():
+            ch = str(row["chiave"])
+            op = str(row["operatore"])
+            if "_" in ch:
+                parti = ch.split("_")
+                g_data = parti[0]
+                if g_data in dati:
+                    f_orario = parti[1] + " - " + parti[2]
+                    s_idx = int(parti[3])
+                    if f_orario in dati[g_data] and s_idx < MAX_SLOTS:
+                        dati[g_data][f_orario][s_idx] = op
+    except Exception:
+        pass
     return dati
 
 def salva_turno_db(data_g, fascia, slot, operatore):
-    # Genera la stessa chiave unica per salvare il nome
-    chiave_db = f"{data_g}_{fascia}_{slot}"
-    # Aggiorna istantaneamente la memoria permanente nel cloud
-    if operatore != "- Vuoto -":
-        st.secrets["turni_memorizzati"][chiave_db] = operatore
-    else:
-        if chiave_db in st.secrets["turni_memorizzati"]:
-            del st.secrets["turni_memorizzati"][chiave_db]
-    conn = sqlite3.connect("database_turni_rems.db")
-    c = conn.cursor()
-    if operatore != "- Vuoto -":
-        c.execute("""
-            INSERT INTO turni (data_giorno, fascia, slot_index, operatore) VALUES (?, ?, ?, ?)
-            ON CONFLICT(data_giorno, fascia, slot_index) DO UPDATE SET operatore=excluded.operatore
-        """, (data_g, fascia, slot, operatore))
-    else:
-        c.execute("DELETE FROM turni WHERE data_giorno=? AND fascia=? AND slot_index=?", (data_g, fascia, slot))
-    conn.commit()
-    conn.close()
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(ttl=0)
+        f_p = fascia.replace(" ", "").split("-")
+        f_pulita = f_p[0] + "_" + f_p[1]
+        chiave_unica = f"{data_g}_{f_pulita}_{slot}"
+        
+        df = df[df["chiave"] != chiave_unica]
+        if operatore != "- Vuoto -":
+            import pandas as pd
+            nuova_riga = pd.DataFrame([{"chiave": chiave_unica, "operatore": operatore}])
+            df = pd.concat([df, nuova_riga], ignore_index=True)
+        conn.update(data=df)
+    except Exception:
+        pass
 
 dati_turni = carica_turni_settimana(date_sett)
 lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
@@ -147,7 +132,6 @@ for idx, dt in enumerate(date_sett):
                 if scelta != valore_salvato:
                     salva_turno_db(k_g, fas, s, scelta)
                     st.rerun()
-
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 
@@ -178,25 +162,22 @@ with tab1:
     html_tab += "</table><br/>"
     st.markdown(html_tab, unsafe_allow_html=True)
     
-    if st.button("🖨️ Apri e Stampa PDF Tabellone", key="univoco_key_pdf_tab", use_container_width=True):
-                # Salviamo il file in una cartella temporanea del server web
+    if st.button("🖨️ Genera PDF Tabellone", key="univ_pdf_tab_key", use_container_width=True):
         path_tab = "Tabellone_Turni_REMS.pdf"
         doc_tab = SimpleDocTemplate(path_tab, pagesize=landscape(letter), leftMargin=20, rightMargin=20, topMargin=20, bottomMargin=20)
         elements_tab = list()
         styles_tab = getSampleStyleSheet()
-        t_st_tab = ParagraphStyle('T_Tab', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=15)
-        c_st_tab = ParagraphStyle('C_Tab', fontName='Helvetica', fontSize=8, alignment=1)
+        t_st_tab = ParagraphStyle('T_Tab', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=15, textColor=colors.black)
+        c_st_tab = ParagraphStyle('C_Tab', fontName='Helvetica', fontSize=8, alignment=1, textColor=colors.black)
         h_st_tab = ParagraphStyle('H_Tab', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.white)
         
         d_inizio = date_sett[0].strftime('%d/%m/%Y')
         d_fine = date_sett[-1].strftime('%d/%m/%Y')
         elements_tab.append(Paragraph(f"PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {d_inizio} AL {d_fine}", t_st_tab))
         
-        giorni_lista_local = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
         headers_pdf = [Paragraph("Fascia Oraria", h_st_tab)]
         for i, d in enumerate(date_sett):
-            giorno_testo_col = giorni_lista_local[i]
-            headers_pdf.append(Paragraph(f"{giorno_testo_col} {d.strftime('%d/%m')}", h_st_tab))
+            headers_pdf.append(Paragraph(f"{g_nomi[i]} {d.strftime('%d/%m')}", h_st_tab))
             
         data_pdf = list()
         data_pdf.append(headers_pdf)
@@ -205,14 +186,11 @@ with tab1:
         r_idx = 1
         for fas in FASCE:
             bg_c = colors.HexColor("#FFF1E0") if "09:00" in fas else colors.HexColor("#F3E5F5")
-            if "09:00" in fas:
-                testo_orario = "dalle ore 09:00<br/>alle ore 14:00"
-            else:
-                testo_orario = "dalle ore 15:00<br/>alle ore 20:00"
+            testo_orario = "dalle ore 09:00<br/>alle ore 14:00" if "09:00" in fas else "dalle ore 15:00<br/>alle ore 20:00"
                 
             for s in range(MAX_SLOTS):
                 f_txt = testo_orario if s == 2 else ""
-                r = [Paragraph(f_txt, ParagraphStyle('F_Tab', fontName='Helvetica-Bold', fontSize=8, alignment=1))]
+                r = [Paragraph(f_txt, ParagraphStyle('F_Tab', fontName='Helvetica-Bold', fontSize=8, alignment=1, textColor=colors.black))]
                 
                 for dt in date_sett:
                     v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
@@ -241,12 +219,16 @@ with tab1:
                 key="dl_tab_univoco"
             )
 
-
 with tab2:
-    st.markdown("<h3 style='text-align:center;'>REPORT CONTEGGI ORE</h3>", unsafe_allow_html=True)
+    st.markdown("""
+        <div style='text-align:center; font-family:Arial; margin-bottom:15px;'>
+            <h2 style='color:#1F538D; margin:0; font-weight:bold;'>REMS CALVI RISORTA</h2>
+            <h4 style='margin:5px 0; color:#555; font-weight:normal;'>Rendicontazione Conteggi Settimanali Ore e Turni</h4>
+        </div>
+    """, unsafe_allow_html=True)
     
     t_c = {n: 0 for n in DB_OPERATORI.keys()}
-    g_i = {n: [] for n in DB_OPERATORI.keys()}
+    g_i = {n: list() for n in DB_OPERATORI.keys()}
     g_n_it = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
     
     for idx, dt in enumerate(date_sett):
@@ -259,25 +241,41 @@ with tab2:
                     if g_n_it[idx] not in g_i[op]:
                         g_i[op].append(g_n_it[idx])
                         
-    # Creazione tabella Web semplificata a righe corte
-    html_rep = "<table style='width:100%; border-collapse:collapse; font-family:Arial;'><tr>"
-    html_rep += "<th>OPERATORE</th><th>ORE S.</th><th>PREV.</th><th>EFF.</th><th>GIORNI</th><th>TOT.</th></tr>"
-    
+    html_rep = """
+    <table style='width:100%; border-collapse:collapse; font-family:Arial; margin-top:10px;'>
+    <tr style='background-color:#1F538D; color:white; text-align:center;'>
+        <th style='padding:10px;'>OPERATORE</th>
+        <th style='padding:10px;'>ORE SERV.</th>
+        <th style='padding:10px;'>DA FARE</th>
+        <th style='padding:10px;'>REGISTRATI</th>
+        <th style='padding:10px;'>GIORNI IMPIEGATI</th>
+        <th style='padding:10px;'>ORE TOTALI</th>
+    </tr>
+    """
     for op, (ore_g, da_f) in DB_OPERATORI.items():
         reg = t_c[op]
         sg = ", ".join(g_i[op]) if g_i[op] else "-"
         if reg > 0:
-            html_rep += f"<tr style='text-align:center;'><td><b>{op}</b></td><td>{ore_g}</td><td>{da_f}</td><td>{reg}</td><td>{sg}</td><td><b>{reg*ore_g} ore</b></td></tr>"
+            html_rep += f"""
+            <tr style='text-align:center;'>
+                <td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold;'>{op}</td>
+                <td style='padding:8px; border:1px solid #ccc;'>{ore_g}</td>
+                <td style='padding:8px; border:1px solid #ccc;'>{da_f}</td>
+                <td style='padding:8px; border:1px solid #ccc;'>{reg}</td>
+                <td style='padding:8px; border:1px solid #ccc;'>{sg}</td>
+                <td style='padding:8px; border:1px solid #ccc; color:#1F538D;'><b>{reg*ore_g} ore</b></td>
+            </tr>
+            """
     html_rep += "</table><br/>"
     st.markdown(html_rep, unsafe_allow_html=True)
     
-    if st.button("📊 Genera PDF Report Ore", key="k_pdf_rep", use_container_width=True):
+    if st.button("📊 Genera PDF Report Ore", key="univ_pdf_rep_key", use_container_width=True):
         path_rep = "Report_Ore_REMS.pdf"
         doc_rep = SimpleDocTemplate(path_rep, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
         elements_rep = list()
         styles_rep = getSampleStyleSheet()
-        t_st_rep = ParagraphStyle('T_Rep', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=20)
-        c_st_rep = ParagraphStyle('C_Rep', fontName='Helvetica', fontSize=9, alignment=1)
+        t_st_rep = ParagraphStyle('T_Rep', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=20, textColor=colors.black)
+        c_st_rep = ParagraphStyle('C_Rep', fontName='Helvetica', fontSize=9, alignment=1, textColor=colors.black)
         h_st_rep = ParagraphStyle('H_Rep', fontName='Helvetica-Bold', fontSize=10, alignment=1, textColor=colors.white)
         
         data_inizio = date_sett[0].strftime('%d/%m/%Y')
@@ -298,9 +296,9 @@ with tab2:
                 
             if reg > 0:
                 data_pdf.append([
-                    Paragraph(op_impaginato, ParagraphStyle('L_Rep', fontName='Helvetica', fontSize=9, alignment=0)),
+                    Paragraph(op_impaginato, ParagraphStyle('L_Rep', fontName='Helvetica', fontSize=9, alignment=0, textColor=colors.black)),
                     Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
-                    Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B_Rep', fontName='Helvetica-Bold', fontSize=9, alignment=1))
+                    Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B_Rep', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.black))
                 ])
                 
         w_rep = [140, 55, 55, 55, 120, 75]
@@ -324,7 +322,4 @@ with tab2:
                 mime="application/pdf",
                 use_container_width=True,
                 key="dl_rep_univoco"
-            )
-
-
-
+                )
