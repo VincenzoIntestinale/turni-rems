@@ -1,4 +1,4 @@
 streamlit
 reportlab
-st-gsheets-connection
 pandas
+streamlit-gsheets-connection
