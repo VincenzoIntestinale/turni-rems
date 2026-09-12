@@ -2,9 +2,18 @@ import os
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
-from streamlit_gsheets import GSheetsConnection
+try:
+    from streamlit_gsheets import GSheetsConnection  # type: ignore[import-not-found]
+except ImportError:
+    GSheetsConnection = None
 
 st.set_page_config(page_title="Gestione Turni REMS", layout="wide")
+
+def get_gsheets_connection():
+    if GSheetsConnection is None:
+        st.error("Manca il pacchetto 'streamlit_gsheets'. Installa con: pip install streamlit-gsheets")
+        st.stop()
+    return st.connection("gsheets", type=GSheetsConnection)
 
 DB_OPERATORI = {
     "ALFONSO SANTANGELO": (5, 6), "ANTONELLA DI BAIA": (5, 5), 
