@@ -25,43 +25,54 @@ if "data_ancora" not in st.session_state:
     oggi = datetime.now()
     st.session_state.data_ancora = oggi - timedelta(days=oggi.weekday())
 
+# Memoria di sicurezza per bloccare i loop visivi
+if "tabella_caricata" not in st.session_state:
+    st.session_state.tabella_caricata = {}
+
 col_prev, col_testo, col_next = st.columns()
 
 with col_prev:
     if st.button("◀ Settimana Prec.", key="nav_sf_prev", use_container_width=True):
         st.session_state.data_ancora -= timedelta(days=7)
+        st.session_state.tabella_caricata.clear()
         st.rerun()
 
 with col_next:
     if st.button("Settimana Succ. ▶", key="nav_sf_next", use_container_width=True):
         st.session_state.data_ancora += timedelta(days=7)
+        st.session_state.tabella_caricata.clear()
         st.rerun()
 
 date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
-lun_str = date_sett.strftime('%d/%m/%Y')
+lun_str = date_sett[0].strftime('%d/%m/%Y')
 dom_str = date_sett[-1].strftime('%d/%m/%Y')
 
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
 def carica_turni_settimana(date_list):
+    if st.session_state.tabella_caricata:
+        return st.session_state.tabella_caricata
+        
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         df = conn.read(ttl=0)
         if df is not None and not df.empty:
             for _, row in df.iterrows():
-                ch, op = str(row["chiave"]).strip(), str(row["operatore"]).strip()
+                ch = str(row["chiave"]).strip()
+                op = str(row["operatore"]).strip()
+                # Esempio chiave: 2026-05-12_09:00-14:00_2
                 if "_" in ch:
                     parti = ch.split("_")
-                    g_data = parti
-                    if g_data in dati:
-                        f_orario = f"{parti}:{parti} - {parti}:{parti}"
-                        s_idx = int(parti)
-                        if f_orario in dati[g_data] and s_idx < MAX_SLOTS:
-                            dati[g_data][f_orario][s_idx] = op
+                    g_data = parti[0]
+                    f_orario = parti[1].replace("-", " - ")
+                    s_idx = int(parti[2])
+                    if g_data in dati and f_orario in dati[g_data] and s_idx < MAX_SLOTS:
+                        dati[g_data][f_orario][s_idx] = op
     except Exception:
         pass
+    st.session_state.tabella_caricata = dati
     return dati
 
 dati_turni = carica_turni_settimana(date_sett)
@@ -84,7 +95,7 @@ with form_inserimento:
             for fas in FASCE:
                 bg_c = "#FFF1E0" if "09:00" in fas else "#F3E5F5"
                 st.markdown(f"<div style='background-color:{bg_c}; padding:4px; margin-top:8px; border-radius:4px; text-align:center; font-size:11px; font-weight:bold; color:#333; font-family:Arial;'>🕒 {fas}</div>", unsafe_allow_html=True)
-                dizionario_scelte[k_g][fas] = list()
+                dizionario_scelte[k_g][fas] = []
                 
                 for s in range(MAX_SLOTS):
                     v_salvato = dati_turni[k_g][fas][s]
@@ -103,9 +114,7 @@ if tasto_salva:
             
         for k_g in dizionario_scelte.keys():
             for fas in FASCE:
-                # Trasforma "09:00 - 14:00" in "09_00_14_00" per la chiave
-                f_pulita = fas.replace(" ", "").replace(":", "_").replace("-", "_")
-                
+                f_pulita = fas.replace(" ", "")
                 for s in range(MAX_SLOTS):
                     chiave_unica = f"{k_g}_{f_pulita}_{s}"
                     scelta_attuale = dizionario_scelte[k_g][fas][s]
@@ -117,8 +126,8 @@ if tasto_salva:
                         df = pd.concat([df, nuova_riga], ignore_index=True)
                         
         conn.update(data=df)
+        st.session_state.tabella_caricata = dizionario_scelte
         st.success("💾 Turni della settimana archiviati con successo!")
-        st.rerun()
     except Exception as e:
         st.error(f"Errore durante il salvataggio: {e}")
 
