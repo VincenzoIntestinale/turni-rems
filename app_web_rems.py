@@ -3,17 +3,11 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
 try:
-    from streamlit_gsheets import GSheetsConnection  # type: ignore[import-not-found]
+    from streamlit_gsheets import GSheetsConnection
 except ImportError:
     GSheetsConnection = None
 
 st.set_page_config(page_title="Gestione Turni REMS", layout="wide")
-
-def get_gsheets_connection():
-    if GSheetsConnection is None:
-        st.error("Manca il pacchetto 'streamlit_gsheets'. Installa con: pip install streamlit-gsheets")
-        st.stop()
-    return st.connection("gsheets", type=GSheetsConnection)
 
 DB_OPERATORI = {
     "ALFONSO SANTANGELO": (5, 6), "ANTONELLA DI BAIA": (5, 5), 
@@ -44,7 +38,7 @@ with col_next:
         st.rerun()
 
 date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
-lun_str = date_sett[0].strftime('%d/%m/%Y')
+lun_str = date_sett.strftime('%d/%m/%Y')
 dom_str = date_sett[-1].strftime('%d/%m/%Y')
 
 with col_testo:
@@ -60,10 +54,10 @@ def carica_turni_settimana(date_list):
                 ch, op = str(row["chiave"]).strip(), str(row["operatore"]).strip()
                 if "_" in ch:
                     parti = ch.split("_")
-                    g_data = parti[0]
+                    g_data = parti
                     if g_data in dati:
-                        f_orario = f"{parti[1]}-{parti[2]}".replace("09:00", "09:00 - 14:00").replace("15:00", "15:00 - 20:00")
-                        s_idx = int(parti[3])
+                        f_orario = f"{parti}:{parti} - {parti}:{parti}"
+                        s_idx = int(parti)
                         if f_orario in dati[g_data] and s_idx < MAX_SLOTS:
                             dati[g_data][f_orario][s_idx] = op
     except Exception:
@@ -90,7 +84,7 @@ with form_inserimento:
             for fas in FASCE:
                 bg_c = "#FFF1E0" if "09:00" in fas else "#F3E5F5"
                 st.markdown(f"<div style='background-color:{bg_c}; padding:4px; margin-top:8px; border-radius:4px; text-align:center; font-size:11px; font-weight:bold; color:#333; font-family:Arial;'>🕒 {fas}</div>", unsafe_allow_html=True)
-                dizionario_scelte[k_g][fas] = []
+                dizionario_scelte[k_g][fas] = list()
                 
                 for s in range(MAX_SLOTS):
                     v_salvato = dati_turni[k_g][fas][s]
@@ -109,8 +103,8 @@ if tasto_salva:
             
         for k_g in dizionario_scelte.keys():
             for fas in FASCE:
-                f_p = fas.replace(" ", "").split("-")
-                f_pulita = f"{f_p[0]}_{f_p[1]}"
+                # Trasforma "09:00 - 14:00" in "09_00_14_00" per la chiave
+                f_pulita = fas.replace(" ", "").replace(":", "_").replace("-", "_")
                 
                 for s in range(MAX_SLOTS):
                     chiave_unica = f"{k_g}_{f_pulita}_{s}"
@@ -197,4 +191,3 @@ st.markdown("""
 }
 </style>
 """, unsafe_allow_html=True)
-
