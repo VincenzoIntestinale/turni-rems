@@ -44,12 +44,7 @@ with col_testo:
 conn = st.connection("sql")
 
 with conn.session as session:
-    session.execute("""
-        CREATE TABLE IF NOT EXISTS turni_rems (
-            chiave TEXT PRIMARY KEY,
-            operatore TEXT
-        );
-    """)
+    session.execute("CREATE TABLE IF NOT EXISTS turni_rems (chiave TEXT PRIMARY KEY, operatore TEXT);")
     session.commit()
 
 def carica_turni_settimana(date_list):
@@ -97,11 +92,11 @@ with form_inserimento:
                 for s in range(MAX_SLOTS):
                     v_salvato = dati_turni[k_g][fas][s]
                     def_idx = lista_ops.index(v_salvato) if v_salvato in lista_ops else 0
-                    
                     scelta = st.selectbox(f"h_{k_g}_{fas}_{s}", options=lista_ops, index=def_idx, key=f"w_sel_{k_g}_{fas}_{s}", label_visibility="collapsed")
                     dizionario_scelte[k_g][fas].append(scelta)
                     
     tasto_salva = st.form_submit_button("💾 SALVA E AGGIORNA TABELLONE", use_container_width=True)
+
 if tasto_salva:
     try:
         with conn.session as session:
@@ -112,19 +107,9 @@ if tasto_salva:
                         chiave_unica = f"{k_g}_{f_p}_{s}"
                         scelta_attuale = dizionario_scelte[k_g][fas][s]
                         
-                        session.execute(
-                            "DELETE FROM turni_rems WHERE chiave = :chiave;",
-                            {"chiave": chiave_unica}
-                        )
-                        
+                        session.execute("DELETE FROM turni_rems WHERE chiave = :chiave;", {"chiave": chiave_unica})
                         if scelta_attuale != "- Vuoto -":
-                            session.execute(
-                                """
-                                INSERT INTO turni_rems (chiave, operatore) 
-                                VALUES (:chiave, :operatore);
-                                """,
-                                {"chiave": chiave_unica, "operatore": scelta_attuale}
-                            )
+                            session.execute("INSERT INTO turni_rems (chiave, operatore) VALUES (:chiave, :operatore);", {"chiave": chiave_unica, "operatore": scelta_attuale})
             session.commit()
         st.success("💾 Turni della settimana archiviati con successo!")
         st.rerun()
