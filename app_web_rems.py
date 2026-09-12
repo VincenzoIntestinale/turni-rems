@@ -3,6 +3,13 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
 
+# Importiamo text() per correggere l'ArgumentError e colors per togliere il giallo
+from sqlalchemy import text
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
 st.set_page_config(page_title="Gestione Turni REMS", layout="wide")
 
 DB_OPERATORI = {
@@ -46,9 +53,9 @@ with col_testo:
 # Connessione nativa al database centralizzato di Streamlit
 conn = st.connection("sql")
 
-# Crea la tabella condivisa online se non esiste
+# CORRETTO: Inserito text() per sbloccare l'ArgumentError all'avvio
 with conn.session as session:
-    session.execute("CREATE TABLE IF NOT EXISTS turni_rems (chiave TEXT PRIMARY KEY, operatore TEXT);")
+    session.execute(text("CREATE TABLE IF NOT EXISTS turni_rems (chiave TEXT PRIMARY KEY, operatore TEXT);"))
     session.commit()
 
 def carica_turni_settimana(date_list):
@@ -77,16 +84,16 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-# Callback per aggiornare il database internet in tempo reale senza ricaricare la pagina
+# CORRETTO: Inserito text() per la rimozione e l'inserimento sicuro a database
 def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     scelta_attuale = st.session_state[chiave_widget]
     f_p = fascia.replace(" ", "").split("-")
     chiave_unica = f"{data_g}_{f_p[0]}_{f_p[1]}_{slot}"
     
     with conn.session as session:
-        session.execute("DELETE FROM turni_rems WHERE chiave = :chiave;", {"chiave": chiave_unica})
+        session.execute(text("DELETE FROM turni_rems WHERE chiave = :chiave;"), {"chiave": chiave_unica})
         if scelta_attuale != "- Vuoto -":
-            session.execute("INSERT INTO turni_rems (chiave, operatore) VALUES (:chiave, :operatore);", {"chiave": chiave_unica, "operatore": scelta_attuale})
+            session.execute(text("INSERT INTO turni_rems (chiave, operatore) VALUES (:chiave, :operatore);"), {"chiave": chiave_unica, "operatore": scelta_attuale})
         session.commit()
 
 colonne_giorni = st.columns(7)
@@ -132,7 +139,7 @@ with tab1:
                 v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
                 if " " in v and v != "- Vuoto -":
                     parti_nome = v.split(" ", 1)
-                    v_p = f"{parti_nome}<br/>{parti_nome}"
+                    v_p = f"{parti_nome[0]}<br/>{parti_nome[1]}"
                 else:
                     v_p = v if v != "- Vuoto -" else ""
                 html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black;'>{v_p}</td>"
@@ -161,7 +168,7 @@ with tab1:
         
         r_idx = 1
         for fas in FASCE:
-            bg_c = colors.HexColor("#FFF1E0") if "09:00" in fas else colors.HexColor("#F3E5F5")
+            bg_c = colors.HexColor("#FFF1E0") if "09:00" in fas else "#F3E5F5"
             testo_orario = "dalle ore 09:00<br/>alle ore 14:00" if "09:00" in fas else "dalle ore 15:00<br/>alle ore 20:00"
             for s in range(MAX_SLOTS):
                 f_txt = testo_orario if s == 2 else ""
@@ -171,13 +178,13 @@ with tab1:
                     testo_pulito = v if v != "- Vuoto -" else ""
                     if " " in testo_pulito:
                         parti_nome = testo_pulito.split(" ", 1)
-                        testo_pulito = f"{parti_nome}<br/>{parti_nome}"
+                        testo_pulito = f"{parti_nome[0]}<br/>{parti_nome[1]}"
                     r.append(Paragraph(testo_pulito, c_st_tab))
                 data_pdf.append(r)
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        w_cols = [75, 95, 95, 95, 95, 95, 95, 95]
+        w_cols = [90, 95, 90, 95, 90, 95, 90, 95]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
         elements_tab.append(t_table)
@@ -207,11 +214,11 @@ with tab2:
         if reg > 0:
             if " " in op:
                 parti_op = op.split(" ", 1)
-                op_p = f"{parti_op}<br/>{parti_op}"
+                op_p = f"{parti_op[0]}<br/>{parti_op[1]}"
             else:
                 op_p = op
             html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{reg}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D; font-size:12px;'><b>{reg*ore_g} ore</b></td></tr>"
-    html_rep += "</table></div><br/>"
+    html_rep += "</table></div>"
     st.markdown(html_rep, unsafe_allow_html=True)
     
     if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
@@ -235,7 +242,7 @@ with tab2:
             if reg > 0:
                 if " " in op:
                     parti_op = op.split(" ", 1)
-                    op_p = f"{parti_op}<br/>{parti_op}"
+                    op_p = f"{parti_op[0]}<br/>{parti_op[1]}"
                 else:
                     op_p = op
                 data_pdf.append([
@@ -244,7 +251,7 @@ with tab2:
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.black))
                 ])
                 
-        w_rep = [160, 55, 55, 55, 110, 65]
+        w_rep = [160, 55, 55, 50, 110, 70]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")),
