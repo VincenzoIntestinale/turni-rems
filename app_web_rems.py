@@ -256,7 +256,7 @@ with tab2:
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.black))
                 ])
                 
-        w_rep = [140, 55, 55, 55, 120, 75]
+                w_rep = [140, 55, 55, 55, 120, 75]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")),
@@ -265,22 +265,25 @@ with tab2:
             ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),
             ('BOTTOMPADDING', (0,0), (-1,-1), 6),
             ('TOPPADDING', (0,0), (-1,-1), 6)
-]))
+        ]))
         elements_rep.append(t_rep)
         doc_rep.build(elements_rep)
+        
         with open(path_rep, "rb") as file:
-            st.download_button(label="📥 Scarica il PDF del Report Ore", data=file, 
-                               file_name=f"Report_Ore_{lun_str.replace('/', '_')}.pdf", 
-                               mime="application/pdf", use_container_width=True)
-            #--- PULSANTE LATERALE PER SCARICARE E SALVARE IL FILE CSV DI BACKUP ---
-            df_export = pd.DataFrame(righe_per_esportazione) if righe_per_esportazione else 
-            pd.DataFrame(columns=["chiave", "operatore"])
-            csv_data = df_export.to_csv(index=False).encode('utf-8')
-            st.sidebar.markdown("### 💾 Salva Lavoro Permanentemente")
-            st.sidebar.download_button(
-                label="Scarica File Turni (.csv)",
-                data=csv_data,
-                file_name=f"turni_rems_{lun_str.replace('/', '_')}.csv",
-                mime="text/csv",
-                use_container_width=True
-                )
+            st.download_button(label="📥 Scarica il PDF del Report Ore", data=file, file_name=f"Report_Ore_{lun_str.replace('/', '_')}.pdf", mime="application/pdf", use_container_width=True)
+
+# --- PULSANTE LATERALE PER SCARICARE E SALVARE IL FILE CSV DI BACKUP ---
+if righe_per_esportazione:
+    df_export = pd.DataFrame(righe_per_esportazione)
+else:
+    df_export = pd.DataFrame(columns=["chiave", "operatore"])
+
+csv_data = df_export.to_csv(index=False).encode('utf-8')
+st.sidebar.markdown("### 💾 Salva Lavoro Permanentemente")
+st.sidebar.download_button(
+    label="Scarica File Turni (.csv)",
+    data=csv_data,
+    file_name=f"turni_rems_{lun_str.replace('/', '_')}.csv",
+    mime="text/csv",
+    use_container_width=True
+)
