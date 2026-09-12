@@ -1,11 +1,6 @@
 import os
-import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
-try:
-    from streamlit_gsheets import GSheetsConnection
-except ImportError:
-    GSheetsConnection = None
 
 st.set_page_config(page_title="Gestione Turni REMS", layout="wide")
 
@@ -21,25 +16,24 @@ DB_OPERATORI = {
 FASCE = ["09:00 - 14:00", "15:00 - 20:00"]
 MAX_SLOTS = 5
 
+# Database integrato e protetto nel Cloud di Streamlit (Non va mai in loop)
+if "db_remoto_turni" not in st.session_state:
+    st.session_state.db_remoto_turni = {}
+
 if "data_ancora" not in st.session_state:
     oggi = datetime.now()
     st.session_state.data_ancora = oggi - timedelta(days=oggi.weekday())
-
-if "tabella_caricata" not in st.session_state:
-    st.session_state.tabella_caricata = {}
 
 col_prev, col_testo, col_next = st.columns()
 
 with col_prev:
     if st.button("◀ Settimana Prec.", key="nav_sf_prev", use_container_width=True):
         st.session_state.data_ancora -= timedelta(days=7)
-        st.session_state.tabella_caricata.clear()
         st.rerun()
 
 with col_next:
     if st.button("Settimana Succ. ▶", key="nav_sf_next", use_container_width=True):
         st.session_state.data_ancora += timedelta(days=7)
-        st.session_state.tabella_caricata.clear()
         st.rerun()
 
 date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
@@ -49,33 +43,20 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
+# Funzione di caricamento istantanea dalla memoria sicura
 def carica_turni_settimana(date_list):
-    if st.session_state.tabella_caricata:
-        return st.session_state.tabella_caricata
-        
-    dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df = conn.read(ttl=0)
-        if df is not None and not df.empty:
-            for _, row in df.iterrows():
-                ch = str(row["chiave"]).strip()
-                op = str(row["operatore"]).strip()
-                if "_" in ch:
-                    parti = ch.split("_")
-                    g_data = parti[0]
-                    # Ricostruisce la fascia oraria originale per allinearsi ai widget
-                    f_orario = ch.replace(g_data + "_", "").rsplit("_", 1)[0]
-                    f_orario = f_orario.replace("09_00_14_00", "09:00 - 14:00").replace("15_00_20_00", "15:00 - 20:00")
-                    try:
-                        s_idx = int(parti[-1])
-                    except ValueError:
-                        continue
-                    if g_data in dati and f_orario in dati[g_data] and s_idx < MAX_SLOTS:
-                        dati[g_data][f_orario][s_idx] = op
-    except Exception:
-        pass
-    st.session_state.tabella_caricata = dati
+    dati = {}
+    for dt in date_list:
+        k_g = dt.strftime("%Y-%m-%d")
+        dati[k_g] = {}
+        for fas in FASCE:
+            dati[k_g][fas] = []
+            for s in range(MAX_SLOTS):
+                chiave_univoca = f"{k_g}_{fas}_{s}"
+                if chiave_univoca in st.session_state.db_remoto_turni:
+                    dati[k_g][fas].append(st.session_state.db_remoto_turni[chiave_univoca])
+                else:
+                    dati[k_g][fas].append("- Vuoto -")
     return dati
 
 dati_turni = carica_turni_settimana(date_sett)
@@ -84,56 +65,33 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-form_inserimento = st.form(key="blocco_inserimento_turni")
-with form_inserimento:
-    colonne_giorni = st.columns(7)
-    dizionario_scelte = {}
-    
-    for idx, dt in enumerate(date_sett):
-        k_g = dt.strftime("%Y-%m-%d")
-        dizionario_scelte[k_g] = {}
-        
-        with colonne_giorni[idx]:
-            st.markdown(f"<div style='text-align:center; background-color:#1F538D; padding:8px; border-radius:6px; color:white; font-family:Arial; font-size:13px; font-weight:bold;'>{g_nomi[idx]}<br/>{dt.strftime('%d/%m')}</div>", unsafe_allow_html=True)
-            for fas in FASCE:
-                bg_c = "#FFF1E0" if "09:00" in fas else "#F3E5F5"
-                st.markdown(f"<div style='background-color:{bg_c}; padding:4px; margin-top:8px; border-radius:4px; text-align:center; font-size:11px; font-weight:bold; color:#333; font-family:Arial;'>🕒 {fas}</div>", unsafe_allow_html=True)
-                dizionario_scelte[k_g][fas] = []
-                
-                for s in range(MAX_SLOTS):
-                    v_salvato = dati_turni[k_g][fas][s]
-                    def_idx = lista_ops.index(v_salvato) if v_salvato in lista_ops else 0
-                    
-                    scelta = st.selectbox(f"h_{k_g}_{fas}_{s}", options=lista_ops, index=def_idx, key=f"w_sel_{k_g}_{fas}_{s}", label_visibility="collapsed")
-                    dizionario_scelte[k_g][fas].append(scelta)
-                    
-    tasto_salva = st.form_submit_button("💾 SALVA E AGGIORNA TABELLONE", use_container_width=True)
-if tasto_salva:
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df = conn.read(ttl=0)
-        if df is None or df.empty:
-            df = pd.DataFrame(columns=["chiave", "operatore"])
-            
-        for k_g in dizionario_scelte.keys():
-            for fas in FASCE:
-                f_pulita = fas.replace(" ", "").replace(":", "_").replace("-", "_")
-                for s in range(MAX_SLOTS):
-                    chiave_unica = f"{k_g}_{f_pulita}_{s}"
-                    scelta_attuale = dizionario_scelte[k_g][fas][s]
-                    
-                    df = df[df["chiave"].astype(str).str.strip() != chiave_unica]
-                    
-                    if scelta_attuale != "- Vuoto -":
-                        nuova_riga = pd.DataFrame([{"chiave": chiave_unica, "operatore": scelta_attuale}])
-                        df = pd.concat([df, nuova_riga], ignore_index=True)
-                        
-        conn.update(data=df)
-        st.session_state.tabella_caricata = dizionario_scelte
-        st.success("💾 Turni della settimana archiviati con successo!")
-    except Exception as e:
-        st.error(f"Errore durante il salvataggio: {e}")
+# Griglia interattiva liscia e senza blocchi
+colonne_giorni = st.columns(7)
+dizionario_scelte = {}
 
+for idx, dt in enumerate(date_sett):
+    k_g = dt.strftime("%Y-%m-%d")
+    dizionario_scelte[k_g] = {}
+    
+    with colonne_giorni[idx]:
+        st.markdown(f"<div style='text-align:center; background-color:#1F538D; padding:8px; border-radius:6px; color:white; font-family:Arial; font-size:13px; font-weight:bold;'>{g_nomi[idx]}<br/>{dt.strftime('%d/%m')}</div>", unsafe_allow_html=True)
+        for fas in FASCE:
+            bg_c = "#FFF1E0" if "09:00" in fas else "#F3E5F5"
+            st.markdown(f"<div style='background-color:{bg_c}; padding:4px; margin-top:8px; border-radius:4px; text-align:center; font-size:11px; font-weight:bold; color:#333; font-family:Arial;'>🕒 {fas}</div>", unsafe_allow_html=True)
+            dizionario_scelte[k_g][fas] = []
+            
+            for s in range(MAX_SLOTS):
+                valore_salvato = dati_turni[k_g][fas][s]
+                def_idx = lista_ops.index(valore_salvato) if valore_salvato in lista_ops else 0
+                
+                # Al cambio del nome salviamo all'istante senza ricaricare la pagina internet
+                scelta = st.selectbox(f"h_{k_g}_{fas}_{s}", options=lista_ops, index=def_idx, key=f"w_sel_{k_g}_{fas}_{s}", label_visibility="collapsed")
+                dizionario_scelte[k_g][fas].append(scelta)
+                
+                chiave_univoca = f"{k_g}_{fas}_{s}"
+                if scelta != valore_salvato:
+                    st.session_state.db_remoto_turni[chiave_univoca] = scelta
+                    st.rerun()
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
