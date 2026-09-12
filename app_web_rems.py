@@ -25,7 +25,6 @@ if "data_ancora" not in st.session_state:
     oggi = datetime.now()
     st.session_state.data_ancora = oggi - timedelta(days=oggi.weekday())
 
-# Memoria di sicurezza per bloccare i loop visivi
 if "tabella_caricata" not in st.session_state:
     st.session_state.tabella_caricata = {}
 
@@ -62,12 +61,16 @@ def carica_turni_settimana(date_list):
             for _, row in df.iterrows():
                 ch = str(row["chiave"]).strip()
                 op = str(row["operatore"]).strip()
-                # Esempio chiave: 2026-05-12_09:00-14:00_2
                 if "_" in ch:
                     parti = ch.split("_")
                     g_data = parti[0]
-                    f_orario = parti[1].replace("-", " - ")
-                    s_idx = int(parti[2])
+                    # Ricostruisce la fascia oraria originale per allinearsi ai widget
+                    f_orario = ch.replace(g_data + "_", "").rsplit("_", 1)[0]
+                    f_orario = f_orario.replace("09_00_14_00", "09:00 - 14:00").replace("15_00_20_00", "15:00 - 20:00")
+                    try:
+                        s_idx = int(parti[-1])
+                    except ValueError:
+                        continue
                     if g_data in dati and f_orario in dati[g_data] and s_idx < MAX_SLOTS:
                         dati[g_data][f_orario][s_idx] = op
     except Exception:
@@ -114,7 +117,7 @@ if tasto_salva:
             
         for k_g in dizionario_scelte.keys():
             for fas in FASCE:
-                f_pulita = fas.replace(" ", "")
+                f_pulita = fas.replace(" ", "").replace(":", "_").replace("-", "_")
                 for s in range(MAX_SLOTS):
                     chiave_unica = f"{k_g}_{f_pulita}_{s}"
                     scelta_attuale = dizionario_scelte[k_g][fas][s]
