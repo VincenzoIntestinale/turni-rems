@@ -22,16 +22,21 @@ if "data_ancora" not in st.session_state:
     oggi = datetime.now()
     st.session_state.data_ancora = oggi - timedelta(days=oggi.weekday())
 
-col_prev, col_testo, col_next = st.columns([1, 2, 1])
+if "dati_locali" not in st.session_state:
+    st.session_state.dati_locali = {}
+
+col_prev, col_testo, col_next = st.columns()
 
 with col_prev:
     if st.button("◀ Settimana Prec.", key="nav_sf_prev", use_container_width=True):
         st.session_state.data_ancora -= timedelta(days=7)
+        st.session_state.dati_locali.clear()
         st.rerun()
 
 with col_next:
     if st.button("Settimana Succ. ▶", key="nav_sf_next", use_container_width=True):
         st.session_state.data_ancora += timedelta(days=7)
+        st.session_state.dati_locali.clear()
         st.rerun()
 
 date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
@@ -42,6 +47,9 @@ with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
 def carica_turni_settimana(date_list):
+    if st.session_state.dati_locali:
+        return st.session_state.dati_locali
+        
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
@@ -60,17 +68,23 @@ def carica_turni_settimana(date_list):
                             dati[g_data][f_orario][s_idx] = op
     except Exception:
         pass
+    st.session_state.dati_locali = dati
     return dati
 
 def salva_turno_db(data_g, fascia, slot, operatore):
     try:
+        # Aggiorna istantaneamente la memoria locale per bloccare il loop
+        st.session_state.dati_locali[data_g][fascia][slot] = operatore
+        
         conn = st.connection("gsheets", type=GSheetsConnection)
         df = conn.read(ttl=0)
         if df is None or df.empty:
             df = pd.DataFrame(columns=["chiave", "operatore"])
+            
         f_p = fascia.replace(" ", "").split("-")
         f_pulita = f"{f_p[0]}_{f_p[1]}"
         chiave_unica = f"{data_g}_{f_pulita}_{slot}"
+        
         df = df[df["chiave"].astype(str).str.strip() != chiave_unica]
         if operatore != "- Vuoto -":
             nuova_riga = pd.DataFrame([{"chiave": chiave_unica, "operatore": operatore}])
@@ -100,7 +114,6 @@ for idx, dt in enumerate(date_sett):
                 if scelta != v_salvato:
                     salva_turno_db(k_g, fas, s, scelta)
                     st.rerun()
-
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
@@ -129,7 +142,7 @@ with tab1:
 
 with tab2:
     t_c = {n: 0 for n in DB_OPERATORI.keys()}
-    g_i = {n: [] for n in DB_OPERATORI.keys()}
+    g_i = {n: list() for n in DB_OPERATORI.keys()}
     g_n_it = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
     for idx, dt in enumerate(date_sett):
         k_g = dt.strftime("%Y-%m-%d")
@@ -156,7 +169,7 @@ st.markdown("""
 <style>
 @media print {
     [data-testid="stSidebar"], [data-testid="stHeader"], .stActionButton, .stSelectbox, div.element-container, div.stBlock, button { display: none !important; }
-    iframe { display: none !important; }
+    iframe, hr { display: none !important; }
     body { background: white; color: black; }
 }
 </style>
