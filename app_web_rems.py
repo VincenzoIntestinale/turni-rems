@@ -40,10 +40,9 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# Connessione al database SQL interno di Streamlit
+# Connessione nativa SQL locale/remota
 conn = st.connection("sql")
 
-# Inizializza la tabella se non esiste
 with conn.session as session:
     session.execute("""
         CREATE TABLE IF NOT EXISTS turni_rems (
@@ -59,14 +58,14 @@ def carica_turni_settimana(date_list):
         df = conn.query("SELECT chiave, operatore FROM turni_rems;", ttl=0)
         if df is not None and not df.empty:
             for _, row in df.iterrows():
-                ch, op = str(row["chiave"]).strip(), str(row["operatore"]).strip()
+                ch = str(row["chiave"]).strip()
+                op = str(row["operatore"]).strip()
                 if "_" in ch:
                     parti = ch.split("_")
                     g_data = parti[0]
                     if g_data in dati:
-                        f_orario = f"{parti[1]} - {parti[2]}"
-                        f_orario = f_orario.replace("09_00", "09:00").replace("14_00", "14:00").replace("15_00", "15:00").replace("20_00", "20:00")
-                        s_idx = int(parti[3])
+                        f_orario = f"{parti[1]}:{parti[2]} - {parti[3]}:{parti[4]}"
+                        s_idx = int(parti[5])
                         if f_orario in dati[g_data] and s_idx < MAX_SLOTS:
                             dati[g_data][f_orario][s_idx] = op
     except Exception:
@@ -105,37 +104,33 @@ with form_inserimento:
     tasto_salva = st.form_submit_button("💾 SALVA E AGGIORNA TABELLONE", use_container_width=True)
 if tasto_salva:
     try:
-        # Elabora tutte le caselle caricate a schermo in un unico passaggio
-        for k_g in dizionario_scelte.keys():
-            for fas in FASCE:
-                # Semplifica la fascia oraria per evitare simboli strani nella chiave
-                f_p = fas.replace(" ", "").replace(":", "_").replace("-", "_")
-                
-                for s in range(MAX_SLOTS):
-                    chiave_unica = f"{k_g}_{f_p}_{s}"
-                    scelta_attuale = dizionario_scelte[k_g][fas][s]
-                    
-                    with conn.session as session:
-                        if scelta_attuale != "- Vuoto -":
-                            # Inserisce o aggiorna la riga nel database permanente
-                            session.execute("""
-                                INSERT INTO turni_rems (chiave, operatore) 
-                                VALUES (:chiave, :operatore)
-                                ON CONFLICT(chiave) DO UPDATE SET operatore = excluded.operatore;
-                            """, {"chiave": chiave_unica, "operatore": scelta_attuale})
-                        else:
-                            # Se la casella viene svuotata, cancella il vecchio record
-                            session.execute("""
-                                DELETE FROM turni_rems WHERE chiave = :chiave;
-                            """, {"chiave": chiave_unica})
-                        session.commit()
+        with conn.session as session:
+            for k_g in dizionario_scelte.keys():
+                for fas in FASCE:
+                    f_p = fas.replace(" ", "").replace(":", "_").replace("-", "_")
+                    for s in range(MAX_SLOTS):
+                        chiave_unica = f"{k_g}_{f_p}_{s}"
+                        scelta_attuale = dizionario_scelte[k_g][fas][s]
                         
+                        session.execute(
+                            "DELETE FROM turni_rems WHERE chiave = :chiave;",
+                            {"chiave": chiave_unica}
+                        )
+                        
+                        if scelta_attuale != "- Vuoto -":
+                            session.execute(
+                                """
+                                INSERT INTO turni_rems (chiave, operatore) 
+                                VALUES (:chiave, :operatore);
+                                """,
+                                {"chiave": chiave_unica, "operatore": scelta_attuale}
+                            )
+            session.commit()
         st.success("💾 Turni della settimana archiviati con successo!")
         st.rerun()
     except Exception as e:
         st.error(f"Errore durante il salvataggio: {e}")
 
-# --- CENTRO STAMPA E ANTEPRIME INFERIORI ---
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
