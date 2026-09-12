@@ -3,11 +3,6 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
 
-from reportlab.lib.pagesizes import letter, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-
 st.set_page_config(page_title="Gestione Turni REMS", layout="wide")
 
 DB_OPERATORI = {
@@ -25,9 +20,6 @@ MAX_SLOTS = 5
 if "data_ancora" not in st.session_state:
     oggi = datetime.now()
     st.session_state.data_ancora = oggi - timedelta(days=oggi.weekday())
-
-if "matrice_turni" not in st.session_state:
-    st.session_state.matrice_turni = {}
 
 col_prev, col_testo, col_next = st.columns([1, 2, 1])
 
@@ -51,37 +43,51 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-dati_turni = {}
-for dt in date_sett:
-    k_g = dt.strftime("%Y-%m-%d")
-    dati_turni[k_g] = {}
-    for fas in FASCE:
-        dati_turni[k_g][fas] = []
-        for s in range(MAX_SLOTS):
-            chiave_cella = f"{k_g}_{fas}_{s}"
-            if chiave_cella in st.session_state.matrice_turni:
-                dati_turni[k_g][fas].append(st.session_state.matrice_turni[chiave_cella])
-            else:
-                dati_turni[k_g][fas].append("- Vuoto -")
+# Connessione nativa al database centralizzato di Streamlit
+conn = st.connection("sql")
 
+# Crea la tabella condivisa online se non esiste
+with conn.session as session:
+    session.execute("CREATE TABLE IF NOT EXISTS turni_rems (chiave TEXT PRIMARY KEY, operatore TEXT);")
+    session.commit()
+
+def carica_turni_settimana(date_list):
+    dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
+    try:
+        df = conn.query("SELECT chiave, operatore FROM turni_rems;", ttl=0)
+        if df is not None and not df.empty:
+            for _, row in df.iterrows():
+                ch = str(row["chiave"]).strip()
+                op = str(row["operatore"]).strip()
+                if "_" in ch:
+                    parti = ch.split("_")
+                    g_data = parti[0]
+                    if g_data in dati:
+                        f_orario = f"{parti[1]} - {parti[2]}"
+                        s_idx = int(parti[3])
+                        if f_orario in dati[g_data] and s_idx < MAX_SLOTS:
+                            dati[g_data][f_orario][s_idx] = op
+    except Exception:
+        pass
+    return dati
+
+dati_turni = carica_turni_settimana(date_sett)
 lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
 g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-st.sidebar.markdown("### 📂 Ripristina Turni")
-file_caricato = st.sidebar.file_uploader("Carica file turni (.csv)", type=["csv"])
-if file_caricato is not None:
-    try:
-        df_caricato = pd.read_csv(file_caricato)
-        for _, row in df_caricato.iterrows():
-            st.session_state.matrice_turni[str(row["chiave"])] = str(row["operatore"])
-        st.sidebar.success("Turni caricati!")
-    except Exception:
-        pass
-
-def cambio_turno_evento(chiave_matrice):
-    st.session_state.matrice_turni[chiave_matrice] = st.session_state[f"widget_{chiave_matrice}"]
+# Callback per aggiornare il database internet in tempo reale senza ricaricare la pagina
+def salva_turno_callback(chiave_widget, data_g, fascia, slot):
+    scelta_attuale = st.session_state[chiave_widget]
+    f_p = fascia.replace(" ", "").split("-")
+    chiave_unica = f"{data_g}_{f_p[0]}_{f_p[1]}_{slot}"
+    
+    with conn.session as session:
+        session.execute("DELETE FROM turni_rems WHERE chiave = :chiave;", {"chiave": chiave_unica})
+        if scelta_attuale != "- Vuoto -":
+            session.execute("INSERT INTO turni_rems (chiave, operatore) VALUES (:chiave, :operatore);", {"chiave": chiave_unica, "operatore": scelta_attuale})
+        session.commit()
 
 colonne_giorni = st.columns(7)
 for idx, dt in enumerate(date_sett):
@@ -96,32 +102,16 @@ for idx, dt in enumerate(date_sett):
                 valore_attuale = dati_turni[k_g][fas][s]
                 def_idx = lista_ops.index(valore_attuale) if valore_attuale in lista_ops else 0
                 
-                chiave_matrice = f"{k_g}_{fas}_{s}"
+                ch_widget = f"w_sel_{k_g}_{fas.replace(' ', '').replace(':', '_').replace('-', '_')}_{s}"
                 st.selectbox(
-                    label=f"h_{chiave_matrice}",
+                    label=f"h_{ch_widget}",
                     options=lista_ops,
                     index=def_idx,
-                    key=f"widget_{chiave_matrice}",
+                    key=ch_widget,
                     label_visibility="collapsed",
-                    on_change=cambio_turno_evento,
-                    args=(chiave_matrice,)
+                    on_change=salva_turno_callback,
+                    args=(ch_widget, k_g, fas, s)
                 )
-# --- RIGENERAZIONE DATI AGGIORNATI DOPO IL CAMBIO ---
-dati_turni_agg = {}
-righe_per_esportazione = []
-
-for dt in date_sett:
-    k_g = dt.strftime("%Y-%m-%d")
-    dati_turni_agg[k_g] = {}
-    for fas in FASCE:
-        dati_turni_agg[k_g][fas] = []
-        for s in range(MAX_SLOTS):
-            ch_c = f"{k_g}_{fas}_{s}"
-            val = st.session_state.matrice_turni.get(ch_c, "- Vuoto -")
-            dati_turni_agg[k_g][fas].append(val)
-            if val != "- Vuoto -":
-                righe_per_esportazione.append({"chiave": ch_c, "operatore": val})
-
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
@@ -139,10 +129,10 @@ with tab1:
             f_txt = f"<b>{txt_orario}</b>" if s == 2 else ""
             html_tab += f"<tr style='background-color:{bg}; text-align:center;'><td style='padding:6px; border:1px solid #ddd; font-size:11px;'>{f_txt}</td>"
             for dt in date_sett:
-                v = dati_turni_agg[dt.strftime("%Y-%m-%d")][fas][s]
+                v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
                 if " " in v and v != "- Vuoto -":
                     parti_nome = v.split(" ", 1)
-                    v_p = f"{parti_nome[0]}<br/>{parti_nome[1]}"
+                    v_p = f"{parti_nome}<br/>{parti_nome}"
                 else:
                     v_p = v if v != "- Vuoto -" else ""
                 html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black;'>{v_p}</td>"
@@ -150,7 +140,6 @@ with tab1:
     html_tab += "</table></div><br/>"
     st.markdown(html_tab, unsafe_allow_html=True)
     
-    # PULSANTE DI GENERAZIONE PDF TABELLONE (ORIZZONTALE A4)
     if st.button("🖨️ Genera PDF Tabellone Settimanale", key="gen_pdf_tab_btn", use_container_width=True):
         path_tab = "Tabellone_Turni_REMS.pdf"
         doc_tab = SimpleDocTemplate(path_tab, pagesize=landscape(letter), leftMargin=20, rightMargin=20, topMargin=20, bottomMargin=20)
@@ -178,17 +167,17 @@ with tab1:
                 f_txt = testo_orario if s == 2 else ""
                 r = [Paragraph(f_txt, ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=8, alignment=1, textColor=colors.black))]
                 for dt in date_sett:
-                    v = dati_turni_agg[dt.strftime("%Y-%m-%d")][fas][s]
+                    v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
                     testo_pulito = v if v != "- Vuoto -" else ""
                     if " " in testo_pulito:
                         parti_nome = testo_pulito.split(" ", 1)
-                        testo_pulito = f"{parti_nome[0]}<br/>{parti_nome[1]}"
+                        testo_pulito = f"{parti_nome}<br/>{parti_nome}"
                     r.append(Paragraph(testo_pulito, c_st_tab))
                 data_pdf.append(r)
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        w_cols = [100, 95, 95, 95, 95, 95, 95, 95]
+        w_cols = [75, 95, 95, 95, 95, 95, 95, 95]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
         elements_tab.append(t_table)
@@ -205,7 +194,7 @@ with tab2:
         k_g = dt.strftime("%Y-%m-%d")
         for fas in FASCE:
             for s in range(MAX_SLOTS):
-                op = dati_turni_agg[k_g][fas][s]
+                op = dati_turni[k_g][fas][s]
                 if op in t_c:
                     t_c[op] += 1
                     if g_n_it[idx] not in g_i[op]: g_i[op].append(g_n_it[idx])
@@ -218,14 +207,13 @@ with tab2:
         if reg > 0:
             if " " in op:
                 parti_op = op.split(" ", 1)
-                op_p = f"{parti_op[0]}<br/>{parti_op[1]}"
+                op_p = f"{parti_op}<br/>{parti_op}"
             else:
                 op_p = op
             html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{reg}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D; font-size:12px;'><b>{reg*ore_g} ore</b></td></tr>"
     html_rep += "</table></div><br/>"
     st.markdown(html_rep, unsafe_allow_html=True)
     
-    # PULSANTE DI GENERAZIONE PDF REPORT ORE (VERTICALE A4)
     if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
         path_rep = "Report_Ore_REMS.pdf"
         doc_rep = SimpleDocTemplate(path_rep, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
@@ -247,7 +235,7 @@ with tab2:
             if reg > 0:
                 if " " in op:
                     parti_op = op.split(" ", 1)
-                    op_p = f"{parti_op[0]}<br/>{parti_op[1]}"
+                    op_p = f"{parti_op}<br/>{parti_op}"
                 else:
                     op_p = op
                 data_pdf.append([
@@ -256,7 +244,7 @@ with tab2:
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.black))
                 ])
                 
-                w_rep = [140, 55, 55, 55, 120, 75]
+        w_rep = [160, 55, 55, 55, 110, 65]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")),
@@ -271,19 +259,3 @@ with tab2:
         
         with open(path_rep, "rb") as file:
             st.download_button(label="📥 Scarica il PDF del Report Ore", data=file, file_name=f"Report_Ore_{lun_str.replace('/', '_')}.pdf", mime="application/pdf", use_container_width=True)
-
-# --- PULSANTE LATERALE PER SCARICARE E SALVARE IL FILE CSV DI BACKUP ---
-if righe_per_esportazione:
-    df_export = pd.DataFrame(righe_per_esportazione)
-else:
-    df_export = pd.DataFrame(columns=["chiave", "operatore"])
-
-csv_data = df_export.to_csv(index=False).encode('utf-8')
-st.sidebar.markdown("### 💾 Salva Lavoro Permanentemente")
-st.sidebar.download_button(
-    label="Scarica File Turni (.csv)",
-    data=csv_data,
-    file_name=f"turni_rems_{lun_str.replace('/', '_')}.csv",
-    mime="text/csv",
-    use_container_width=True
-)
