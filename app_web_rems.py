@@ -1,4 +1,5 @@
 import os
+import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
 
@@ -16,9 +17,9 @@ DB_OPERATORI = {
 FASCE = ["09:00 - 14:00", "15:00 - 20:00"]
 MAX_SLOTS = 5
 
-# Memoria di archiviazione centralizzata sicura
-if "db_remoto_turni" not in st.session_state:
-    st.session_state.db_remoto_turni = {}
+# Dizionario stabile centralizzato per memorizzare i turni
+if "archivio_turni_rems" not in st.session_state:
+    st.session_state.archivio_turni_rems = {}
 
 if "data_ancora" not in st.session_state:
     oggi = datetime.now()
@@ -43,12 +44,32 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# Funzione di salvataggio in background (Eliminato st.rerun per bloccare il loop)
-def salva_turno_callback(chiave_univoca):
-    nuovo_valore = st.session_state[chiave_univoca]
-    st.session_state.db_remoto_turni[chiave_univoca] = nuovo_valore
+g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+lista_ops = [""] + list(DB_OPERATORI.keys())
 
-# Caricamento dati immediato
+st.markdown("### 🛠️ Inserimento Rapido Operatori")
+st.write("Seleziona il giorno, l'orario e lo slot, poi scegli il nome e premi Salva.")
+
+# Sistema di inserimento lineare a prova di loop
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    ins_giorno = st.selectbox("1. Scegli il Giorno", options=[d.strftime("%Y-%m-%d") for d in date_sett], format_func=lambda x: g_nomi[[d.strftime("%Y-%m-%d") for d in date_sett].index(x)])
+with c2:
+    ins_fascia = st.selectbox("2. Scegli la Fascia", options=FASCE)
+with c3:
+    ins_slot = st.selectbox("3. Postazione / Riga", options=[f"Operatore {i+1}" for i in range(MAX_SLOTS)], index=0)
+with c4:
+    ins_operatore = st.selectbox("4. Seleziona Nominativo", options=lista_ops)
+
+slot_idx = [f"Operatore {i+1}" for i in range(MAX_SLOTS)].index(ins_slot)
+
+if st.button("💾 REGISTRA NOMINATIVO NEL TABELLONE", use_container_width=True, type="primary"):
+    chiave_salvataggio = f"{ins_giorno}_{ins_fascia}_{slot_idx}"
+    valore_nome = ins_operatore if ins_operatore != "" else "- Vuoto -"
+    st.session_state.archivio_turni_rems[chiave_salvataggio] = valore_nome
+    st.success(f"Registrato: {valore_nome} in data {ins_giorno}")
+    st.rerun()
+# --- RECUPERO DATI PER LE ANTEPRIME E LA STAMPA ---
 dati_turni = {}
 for dt in date_sett:
     k_g = dt.strftime("%Y-%m-%d")
@@ -57,39 +78,11 @@ for dt in date_sett:
         dati_turni[k_g][fas] = []
         for s in range(MAX_SLOTS):
             ch = f"{k_g}_{fas}_{s}"
-            if ch in st.session_state.db_remoto_turni:
-                dati_turni[k_g][fas].append(st.session_state.db_remoto_turni[ch])
+            if ch in st.session_state.archivio_turni_rems:
+                dati_turni[k_g][fas].append(st.session_state.archivio_turni_rems[ch])
             else:
                 dati_turni[k_g][fas].append("- Vuoto -")
 
-lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
-g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
-
-st.markdown("<br/>", unsafe_allow_html=True)
-
-# Disegno della griglia interattiva stabile
-colonne_giorni = st.columns(7)
-for idx, dt in enumerate(date_sett):
-    k_g = dt.strftime("%Y-%m-%d")
-    with colonne_giorni[idx]:
-        st.markdown(f"<div style='text-align:center; background-color:#1F538D; padding:8px; border-radius:6px; color:white; font-family:Arial; font-size:13px; font-weight:bold;'>{g_nomi[idx]}<br/>{dt.strftime('%d/%m')}</div>", unsafe_allow_html=True)
-        for fas in FASCE:
-            bg_c = "#FFF1E0" if "09:00" in fas else "#F3E5F5"
-            st.markdown(f"<div style='background-color:{bg_c}; padding:4px; margin-top:8px; border-radius:4px; text-align:center; font-size:11px; font-weight:bold; color:#333; font-family:Arial;'>🕒 {fas}</div>", unsafe_allow_html=True)
-            for s in range(MAX_SLOTS):
-                v_salvato = dati_turni[k_g][fas][s]
-                def_idx = lista_ops.index(v_salvato) if v_salvato in lista_ops else 0
-                
-                ch_widget = f"{k_g}_{fas}_{s}"
-                st.selectbox(
-                    label=f"h_{k_g}_{fas}_{s}", 
-                    options=lista_ops, 
-                    index=def_idx, 
-                    key=ch_widget, 
-                    label_visibility="collapsed",
-                    on_change=salva_turno_callback,
-                    args=(ch_widget,)
-                )
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
