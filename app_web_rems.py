@@ -21,6 +21,9 @@ if "data_ancora" not in st.session_state:
     oggi = datetime.now()
     st.session_state.data_ancora = oggi - timedelta(days=oggi.weekday())
 
+if "matrice_turni" not in st.session_state:
+    st.session_state.matrice_turni = {}
+
 col_prev, col_testo, col_next = st.columns()
 
 with col_prev:
@@ -40,79 +43,79 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# Connessione nativa SQL integrata
-conn = st.connection("sql")
+# Inizializzazione della memoria locale ultrarapida
+dati_turni = {}
+for dt in date_sett:
+    k_g = dt.strftime("%Y-%m-%d")
+    dati_turni[k_g] = {}
+    for fas in FASCE:
+        dati_turni[k_g][fas] = []
+        for s in range(MAX_SLOTS):
+            chiave_cella = f"{k_g}_{fas}_{s}"
+            if chiave_cella in st.session_state.matrice_turni:
+                dati_turni[k_g][fas].append(st.session_state.matrice_turni[chiave_cella])
+            else:
+                dati_turni[k_g][fas].append("- Vuoto -")
 
-with conn.session as session:
-    session.execute("CREATE TABLE IF NOT EXISTS turni_rems (chiave TEXT PRIMARY KEY, operatore TEXT);")
-    session.commit()
-
-def carica_turni_settimana(date_list):
-    dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
-    try:
-        df = conn.query("SELECT chiave, operatore FROM turni_rems;", ttl=0)
-        if df is not None and not df.empty:
-            for _, row in df.iterrows():
-                ch = str(row["chiave"]).strip()
-                op = str(row["operatore"]).strip()
-                if "_" in ch:
-                    parti = ch.split("_")
-                    g_data = parti[0]
-                    if g_data in dati:
-                        f_orario = f"{parti[1]}:{parti[2]} - {parti[3]}:{parti[4]}"
-                        s_idx = int(parti[5])
-                        if f_orario in dati[g_data] and s_idx < MAX_SLOTS:
-                            dati[g_data][f_orario][s_idx] = op
-    except Exception:
-        pass
-    return dati
-
-dati_turni = carica_turni_settimana(date_sett)
 lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
 g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-form_inserimento = st.form(key="blocco_inserimento_turni")
-with form_inserimento:
-    colonne_giorni = st.columns(7)
-    dizionario_scelte = {}
-    
-    for idx, dt in enumerate(date_sett):
-        k_g = dt.strftime("%Y-%m-%d")
-        dizionario_scelte[k_g] = {}
-        
-        with colonne_giorni[idx]:
-            st.markdown(f"<div style='text-align:center; background-color:#1F538D; padding:8px; border-radius:6px; color:white; font-family:Arial; font-size:13px; font-weight:bold;'>{g_nomi[idx]}<br/>{dt.strftime('%d/%m')}</div>", unsafe_allow_html=True)
-            for fas in FASCE:
-                bg_c = "#FFF1E0" if "09:00" in fas else "#F3E5F5"
-                st.markdown(f"<div style='background-color:{bg_c}; padding:4px; margin-top:8px; border-radius:4px; text-align:center; font-size:11px; font-weight:bold; color:#333; font-family:Arial;'>🕒 {fas}</div>", unsafe_allow_html=True)
-                dizionario_scelte[k_g][fas] = []
-                
-                for s in range(MAX_SLOTS):
-                    v_salvato = dati_turni[k_g][fas][s]
-                    def_idx = lista_ops.index(v_salvato) if v_salvato in lista_ops else 0
-                    scelta = st.selectbox(f"h_{k_g}_{fas}_{s}", options=lista_ops, index=def_idx, key=f"w_sel_{k_g}_{fas}_{s}", label_visibility="collapsed")
-                    dizionario_scelte[k_g][fas].append(scelta)
-                    
-    tasto_salva = st.form_submit_button("💾 SALVA E AGGIORNA TABELLONE", use_container_width=True)
-if tasto_salva:
+# Pannello per caricare un vecchio file salvato, se esistente
+st.sidebar.markdown("### 📂 Ripristina Turni")
+file_caricato = st.sidebar.file_saver = st.sidebar.file_uploader("Carica file turni (.csv)", type=["csv"])
+if file_caricato is not None:
     try:
-        with conn.session as session:
-            for k_g in dizionario_scelte.keys():
-                for fas in FASCE:
-                    f_p = fas.replace(" ", "").replace(":", "_").replace("-", "_")
-                    for s in range(MAX_SLOTS):
-                        chiave_unica = f"{k_g}_{f_p}_{s}"
-                        scelta_attuale = dizionario_scelte[k_g][fas][s]
-                        
-                        session.execute("DELETE FROM turni_rems WHERE chiave = :chiave;", {"chiave": chiave_unica})
-                        if scelta_attuale != "- Vuoto -":
-                            session.execute("INSERT INTO turni_rems (chiave, operatore) VALUES (:chiave, :operatore);", {"chiave": chiave_unica, "operatore": scelta_attuale})
-            session.commit()
-        st.success("💾 Turni della settimana archiviati con successo! Ricarica la pagina per visualizzarli.")
-    except Exception as e:
-        st.error(f"Errore durante il salvataggio: {e}")
+        df_caricato = pd.read_csv(file_caricato)
+        for _, row in df_caricato.iterrows():
+            st.session_state.matrice_turni[str(row["chiave"])] = str(row["operatore"])
+        st.sidebar.success("Turni caricati!")
+    except Exception:
+        pass
+
+# Funzione attivata al cambio dei menu a tendina
+def cambio_turno_evento(chiave_matrice):
+    st.session_state.matrice_turni[chiave_matrice] = st.session_state[f"widget_{chiave_matrice}"]
+
+colonne_giorni = st.columns(7)
+for idx, dt in enumerate(date_sett):
+    k_g = dt.strftime("%Y-%m-%d")
+    with colonne_giorni[idx]:
+        st.markdown(f"<div style='text-align:center; background-color:#1F538D; padding:8px; border-radius:6px; color:white; font-family:Arial; font-size:13px; font-weight:bold;'>{g_nomi[idx]}<br/>{dt.strftime('%d/%m')}</div>", unsafe_allow_html=True)
+        for fas in FASCE:
+            bg_c = "#FFF1E0" if "09:00" in fas else "#F3E5F5"
+            st.markdown(f"<div style='background-color:{bg_c}; padding:4px; margin-top:8px; border-radius:4px; text-align:center; font-size:11px; font-weight:bold; color:#333; font-family:Arial;'>🕒 {fas}</div>", unsafe_allow_html=True)
+            
+            for s in range(MAX_SLOTS):
+                valore_attuale = dati_turni[k_g][fas][s]
+                def_idx = lista_ops.index(valore_attuale) if valore_attuale in lista_ops else 0
+                
+                chiave_matrice = f"{k_g}_{fas}_{s}"
+                st.selectbox(
+                    label=f"h_{chiave_matrice}",
+                    options=lista_ops,
+                    index=def_idx,
+                    key=f"widget_{chiave_matrice}",
+                    label_visibility="collapsed",
+                    on_change=cambio_turno_evento,
+                    args=(chiave_matrice,)
+                )
+# --- RIGENERAZIONE DATI AGGIORNATI DOPO IL CAMBIO ---
+dati_turni_agg = {}
+righe_per_esportazione = []
+
+for dt in date_sett:
+    k_g = dt.strftime("%Y-%m-%d")
+    dati_turni_agg[k_g] = {}
+    for fas in FASCE:
+        dati_turni_agg[k_g][fas] = []
+        for s in range(MAX_SLOTS):
+            ch_c = f"{k_g}_{fas}_{s}"
+            val = st.session_state.matrice_turni.get(ch_c, "- Vuoto -")
+            dati_turni_agg[k_g][fas].append(val)
+            if val != "- Vuoto -":
+                righe_per_esportazione.append({"chiave": ch_c, "operatore": val})
 
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
@@ -131,7 +134,7 @@ with tab1:
             f_txt = f"<b>{txt_orario}</b>" if s == 2 else ""
             html_tab += f"<tr style='background-color:{bg}; text-align:center;'><td style='padding:6px; border:1px solid #ddd; font-size:11px;'>{f_txt}</td>"
             for dt in date_sett:
-                v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
+                v = dati_turni_agg[dt.strftime("%Y-%m-%d")][fas][s]
                 if " " in v and v != "- Vuoto -":
                     parti_nome = v.split(" ", 1)
                     v_p = f"{parti_nome[0]}<br/>{parti_nome[1]}"
@@ -152,7 +155,7 @@ with tab2:
         k_g = dt.strftime("%Y-%m-%d")
         for fas in FASCE:
             for s in range(MAX_SLOTS):
-                op = dati_turni[k_g][fas][s]
+                op = dati_turni_agg[k_g][fas][s]
                 if op in t_c:
                     t_c[op] += 1
                     if g_n_it[idx] not in g_i[op]: g_i[op].append(g_n_it[idx])
@@ -173,6 +176,18 @@ with tab2:
     st.markdown(html_rep, unsafe_allow_html=True)
     if st.button("📊 Stampa Report Ore (A4 Verticale)", key="btn_print_rep", use_container_width=True):
         st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
+
+# --- PULSANTE LATERALE PER SCARICARE E SALVARE IL FILE DEFINITIVO ---
+df_export = pd.DataFrame(righe_per_esportazione) if righe_per_esportazione else pd.DataFrame(columns=["chiave", "operatore"])
+csv_data = df_export.to_csv(index=False).encode('utf-8')
+st.sidebar.markdown("### 💾 Salva Lavoro Permanentemente")
+st.sidebar.download_button(
+    label="Scarica File Turni (.csv)",
+    data=csv_data,
+    file_name=f"turni_rems_{lun_str.replace('/', '_')}.csv",
+    mime="text/csv",
+    use_container_width=True
+)
 
 st.markdown("""
 <style>
