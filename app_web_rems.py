@@ -38,7 +38,9 @@ def init_db():
     conn.commit()
     conn.close()
 
-init_db()
+if "turni_memorizzati" not in st.secrets:
+    st.error("Configura i Secrets sul pannello web prima di continuare!")
+    st.stop()
 
 if "data_ancora" not in st.session_state:
     oggi = datetime.now()
@@ -67,21 +69,29 @@ with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
 def carica_turni_settimana(date_list):
-    conn = sqlite3.connect("database_turni_rems.db")
-    c = conn.cursor()
     dati = {}
+    # Legge i dati direttamente dall'archivio sicuro del cloud
+    archivio = st.secrets["turni_memorizzati"]
     for dt in date_list:
         k_g = dt.strftime("%Y-%m-%d")
         dati[k_g] = {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE}
         for fas in FASCE:
-            c.execute("SELECT slot_index, operatore FROM turni WHERE data_giorno=? AND fascia=?", (k_g, fas))
-            for s_idx, op in c.fetchall():
-                if s_idx < MAX_SLOTS:
-                    dati[k_g][fas][s_idx] = op
-    conn.close()
+            for s_idx in range(MAX_SLOTS):
+                # Genera una chiave di testo unica per ogni singola casella
+                chiave_db = f"{k_g}_{fas}_{s_idx}"
+                if chiave_db in archivio:
+                    dati[k_g][fas][s_idx] = archivio[chiave_db]
     return dati
 
 def salva_turno_db(data_g, fascia, slot, operatore):
+    # Genera la stessa chiave unica per salvare il nome
+    chiave_db = f"{data_g}_{fascia}_{slot}"
+    # Aggiorna istantaneamente la memoria permanente nel cloud
+    if operatore != "- Vuoto -":
+        st.secrets["turni_memorizzati"][chiave_db] = operatore
+    else:
+        if chiave_db in st.secrets["turni_memorizzati"]:
+            del st.secrets["turni_memorizzati"][chiave_db]
     conn = sqlite3.connect("database_turni_rems.db")
     c = conn.cursor()
     if operatore != "- Vuoto -":
