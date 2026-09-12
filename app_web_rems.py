@@ -17,15 +17,11 @@ DB_OPERATORI = {
 FASCE = ["09:00 - 14:00", "15:00 - 20:00"]
 MAX_SLOTS = 5
 
-# Dizionario stabile centralizzato per memorizzare i turni
-if "archivio_turni_rems" not in st.session_state:
-    st.session_state.archivio_turni_rems = {}
-
 if "data_ancora" not in st.session_state:
     oggi = datetime.now()
     st.session_state.data_ancora = oggi - timedelta(days=oggi.weekday())
 
-col_prev, col_testo, col_next = st.columns([1, 2, 1])
+col_prev, col_testo, col_next = st.columns()
 
 with col_prev:
     if st.button("◀ Settimana Prec.", key="nav_sf_prev", use_container_width=True):
@@ -44,45 +40,102 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
+# Connessione al database SQL interno di Streamlit
+conn = st.connection("sql")
+
+# Inizializza la tabella se non esiste
+with conn.session as session:
+    session.execute("""
+        CREATE TABLE IF NOT EXISTS turni_rems (
+            chiave TEXT PRIMARY KEY,
+            operatore TEXT
+        );
+    """)
+    session.commit()
+
+def carica_turni_settimana(date_list):
+    dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
+    try:
+        df = conn.query("SELECT chiave, operatore FROM turni_rems;", ttl=0)
+        if df is not None and not df.empty:
+            for _, row in df.iterrows():
+                ch, op = str(row["chiave"]).strip(), str(row["operatore"]).strip()
+                if "_" in ch:
+                    parti = ch.split("_")
+                    g_data = parti[0]
+                    if g_data in dati:
+                        f_orario = f"{parti[1]} - {parti[2]}"
+                        f_orario = f_orario.replace("09_00", "09:00").replace("14_00", "14:00").replace("15_00", "15:00").replace("20_00", "20:00")
+                        s_idx = int(parti[3])
+                        if f_orario in dati[g_data] and s_idx < MAX_SLOTS:
+                            dati[g_data][f_orario][s_idx] = op
+    except Exception:
+        pass
+    return dati
+
+dati_turni = carica_turni_settimana(date_sett)
+lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
 g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
-lista_ops = [""] + list(DB_OPERATORI.keys())
 
-st.markdown("### 🛠️ Inserimento Rapido Operatori")
-st.write("Seleziona il giorno, l'orario e lo slot, poi scegli il nome e premi Salva.")
+st.markdown("<br/>", unsafe_allow_html=True)
 
-# Sistema di inserimento lineare a prova di loop
-c1, c2, c3, c4 = st.columns(4)
-with c1:
-    ins_giorno = st.selectbox("1. Scegli il Giorno", options=[d.strftime("%Y-%m-%d") for d in date_sett], format_func=lambda x: g_nomi[[d.strftime("%Y-%m-%d") for d in date_sett].index(x)])
-with c2:
-    ins_fascia = st.selectbox("2. Scegli la Fascia", options=FASCE)
-with c3:
-    ins_slot = st.selectbox("3. Postazione / Riga", options=[f"Operatore {i+1}" for i in range(MAX_SLOTS)], index=0)
-with c4:
-    ins_operatore = st.selectbox("4. Seleziona Nominativo", options=lista_ops)
+form_inserimento = st.form(key="blocco_inserimento_turni")
+with form_inserimento:
+    colonne_giorni = st.columns(7)
+    dizionario_scelte = {}
+    
+    for idx, dt in enumerate(date_sett):
+        k_g = dt.strftime("%Y-%m-%d")
+        dizionario_scelte[k_g] = {}
+        
+        with colonne_giorni[idx]:
+            st.markdown(f"<div style='text-align:center; background-color:#1F538D; padding:8px; border-radius:6px; color:white; font-family:Arial; font-size:13px; font-weight:bold;'>{g_nomi[idx]}<br/>{dt.strftime('%d/%m')}</div>", unsafe_allow_html=True)
+            for fas in FASCE:
+                bg_c = "#FFF1E0" if "09:00" in fas else "#F3E5F5"
+                st.markdown(f"<div style='background-color:{bg_c}; padding:4px; margin-top:8px; border-radius:4px; text-align:center; font-size:11px; font-weight:bold; color:#333; font-family:Arial;'>🕒 {fas}</div>", unsafe_allow_html=True)
+                dizionario_scelte[k_g][fas] = []
+                
+                for s in range(MAX_SLOTS):
+                    v_salvato = dati_turni[k_g][fas][s]
+                    def_idx = lista_ops.index(v_salvato) if v_salvato in lista_ops else 0
+                    
+                    scelta = st.selectbox(f"h_{k_g}_{fas}_{s}", options=lista_ops, index=def_idx, key=f"w_sel_{k_g}_{fas}_{s}", label_visibility="collapsed")
+                    dizionario_scelte[k_g][fas].append(scelta)
+                    
+    tasto_salva = st.form_submit_button("💾 SALVA E AGGIORNA TABELLONE", use_container_width=True)
+if tasto_salva:
+    try:
+        # Elabora tutte le caselle caricate a schermo in un unico passaggio
+        for k_g in dizionario_scelte.keys():
+            for fas in FASCE:
+                # Semplifica la fascia oraria per evitare simboli strani nella chiave
+                f_p = fas.replace(" ", "").replace(":", "_").replace("-", "_")
+                
+                for s in range(MAX_SLOTS):
+                    chiave_unica = f"{k_g}_{f_p}_{s}"
+                    scelta_attuale = dizionario_scelte[k_g][fas][s]
+                    
+                    with conn.session as session:
+                        if scelta_attuale != "- Vuoto -":
+                            # Inserisce o aggiorna la riga nel database permanente
+                            session.execute("""
+                                INSERT INTO turni_rems (chiave, operatore) 
+                                VALUES (:chiave, :operatore)
+                                ON CONFLICT(chiave) DO UPDATE SET operatore = excluded.operatore;
+                            """, {"chiave": chiave_unica, "operatore": scelta_attuale})
+                        else:
+                            # Se la casella viene svuotata, cancella il vecchio record
+                            session.execute("""
+                                DELETE FROM turni_rems WHERE chiave = :chiave;
+                            """, {"chiave": chiave_unica})
+                        session.commit()
+                        
+        st.success("💾 Turni della settimana archiviati con successo!")
+        st.rerun()
+    except Exception as e:
+        st.error(f"Errore durante il salvataggio: {e}")
 
-slot_idx = [f"Operatore {i+1}" for i in range(MAX_SLOTS)].index(ins_slot)
-
-if st.button("💾 REGISTRA NOMINATIVO NEL TABELLONE", use_container_width=True, type="primary"):
-    chiave_salvataggio = f"{ins_giorno}_{ins_fascia}_{slot_idx}"
-    valore_nome = ins_operatore if ins_operatore != "" else "- Vuoto -"
-    st.session_state.archivio_turni_rems[chiave_salvataggio] = valore_nome
-    st.success(f"Registrato: {valore_nome} in data {ins_giorno}")
-    st.rerun()
-# --- RECUPERO DATI PER LE ANTEPRIME E LA STAMPA ---
-dati_turni = {}
-for dt in date_sett:
-    k_g = dt.strftime("%Y-%m-%d")
-    dati_turni[k_g] = {}
-    for fas in FASCE:
-        dati_turni[k_g][fas] = []
-        for s in range(MAX_SLOTS):
-            ch = f"{k_g}_{fas}_{s}"
-            if ch in st.session_state.archivio_turni_rems:
-                dati_turni[k_g][fas].append(st.session_state.archivio_turni_rems[ch])
-            else:
-                dati_turni[k_g][fas].append("- Vuoto -")
-
+# --- CENTRO STAMPA E ANTEPRIME INFERIORI ---
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
