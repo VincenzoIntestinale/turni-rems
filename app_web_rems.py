@@ -2,8 +2,6 @@ import os
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
-
-# Importiamo text() per correggere l'ArgumentError e colors per togliere il giallo
 from sqlalchemy import text
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
@@ -50,10 +48,8 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# Connessione nativa al database centralizzato di Streamlit
 conn = st.connection("sql")
 
-# CORRETTO: Inserito text() per sbloccare l'ArgumentError all'avvio
 with conn.session as session:
     session.execute(text("CREATE TABLE IF NOT EXISTS turni_rems (chiave TEXT PRIMARY KEY, operatore TEXT);"))
     session.commit()
@@ -84,7 +80,6 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-# CORRETTO: Inserito text() per la rimozione e l'inserimento sicuro a database
 def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     scelta_attuale = st.session_state[chiave_widget]
     f_p = fascia.replace(" ", "").split("-")
@@ -168,7 +163,7 @@ with tab1:
         
         r_idx = 1
         for fas in FASCE:
-            bg_c = colors.HexColor("#FFF1E0") if "09:00" in fas else "#F3E5F5"
+            bg_c = colors.HexColor("#FFF1E0") if "09:00" in fas else colors.HexColor("#F3E5F5")
             testo_orario = "dalle ore 09:00<br/>alle ore 14:00" if "09:00" in fas else "dalle ore 15:00<br/>alle ore 20:00"
             for s in range(MAX_SLOTS):
                 f_txt = testo_orario if s == 2 else ""
@@ -184,7 +179,7 @@ with tab1:
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        w_cols = [90, 95, 90, 95, 90, 95, 90, 95]
+        w_cols = [75, 95, 95, 95, 95, 95, 95, 95]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
         elements_tab.append(t_table)
@@ -218,7 +213,7 @@ with tab2:
             else:
                 op_p = op
             html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{reg}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D; font-size:12px;'><b>{reg*ore_g} ore</b></td></tr>"
-    html_rep += "</table></div>"
+    html_rep += "</table></div><br/>"
     st.markdown(html_rep, unsafe_allow_html=True)
     
     if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
@@ -251,7 +246,7 @@ with tab2:
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.black))
                 ])
                 
-        w_rep = [160, 55, 55, 50, 110, 70]
+        w_rep = [160, 55, 55, 55, 110, 75]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")),
