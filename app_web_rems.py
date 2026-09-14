@@ -48,6 +48,7 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
+# Connessione SQL centralizzata
 conn = st.connection("sql")
 
 with conn.session as session:
@@ -179,7 +180,7 @@ with tab1:
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        w_cols = [75, 95, 95, 95, 95, 95, 95, 95]
+        w_cols = [90, 95, 95, 95, 95, 95, 95, 95]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
         elements_tab.append(t_table)
@@ -246,7 +247,7 @@ with tab2:
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.black))
                 ])
                 
-        w_rep = [160, 55, 55, 55, 110, 75]
+        w_rep = [160, 50, 50, 50, 110, 80]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")),
