@@ -188,7 +188,7 @@ with tab2:
     g_i = {n: list() for n in DB_OPERATORI.keys()}
     g_n_it = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
     for idx, dt in enumerate(date_sett):
-k_g = dt.strftime("%Y-%m-%d")
+        k_g = dt.strftime("%Y-%m-%d")
 for fas in FASCE:
     for s in range(MAX_SLOTS):
         op = dati_turni[k_g][fas][s]
