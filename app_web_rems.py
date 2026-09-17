@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
-from sqlalchemy import text
+
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
@@ -48,29 +48,20 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# Connessione SQL centralizzata
-conn = st.connection("sql")
-
-with conn.session as session:
-    session.execute(text("CREATE TABLE IF NOT EXISTS turni_rems (chiave TEXT PRIMARY KEY, operatore TEXT);"))
-    session.commit()
-
+# Funzione blindata di lettura dal Cloud protetto di Streamlit
 def carica_turni_settimana(date_list):
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     try:
-        df = conn.query("SELECT chiave, operatore FROM turni_rems;", ttl=0)
-        if df is not None and not df.empty:
-            for _, row in df.iterrows():
-                ch = str(row["chiave"]).strip()
-                op = str(row["operatore"]).strip()
-                if "_" in ch:
-                    parti = ch.split("_")
-                    g_data = parti[0]
-                    if g_data in dati:
-                        f_orario = f"{parti[1]} - {parti[2]}"
-                        s_idx = int(parti[3])
-                        if f_orario in dati[g_data] and s_idx < MAX_SLOTS:
-                            dati[g_data][f_orario][s_idx] = op
+        # Legge direttamente dalle impostazioni di sistema persistenti
+        archivio_cloud = st.secrets["turni_permanenti_rems"]
+        for dt in date_list:
+            k_g = dt.strftime("%Y-%m-%d")
+            for fas in FASCE:
+                f_p = fas.replace(" ", "").replace(":", "_").replace("-", "_")
+                for s in range(MAX_SLOTS):
+                    chiave_unica = f"{k_g}_{f_p}_{s}"
+                    if chiave_unica in archivio_cloud:
+                        dati[k_g][fas][s] = archivio_cloud[chiave_unica]
     except Exception:
         pass
     return dati
@@ -81,16 +72,20 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
+# Funzione blindata di scrittura asincrona nel Cloud protetto
 def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     scelta_attuale = st.session_state[chiave_widget]
-    f_p = fascia.replace(" ", "").split("-")
-    chiave_unica = f"{data_g}_{f_p[0]}_{f_p[1]}_{slot}"
+    f_p = fascia.replace(" ", "").replace(":", "_").replace("-", "_")
+    chiave_unica = f"{data_g}_{f_p}_{slot}"
     
-    with conn.session as session:
-        session.execute(text("DELETE FROM turni_rems WHERE chiave = :chiave;"), {"chiave": chiave_unica})
+    try:
         if scelta_attuale != "- Vuoto -":
-            session.execute(text("INSERT INTO turni_rems (chiave, operatore) VALUES (:chiave, :operatore);"), {"chiave": chiave_unica, "operatore": scelta_attuale})
-        session.commit()
+            st.secrets["turni_permanenti_rems"][chiave_unica] = scelta_attuale
+        else:
+            if chiave_unica in st.secrets["turni_permanenti_rems"]:
+                del st.secrets["turni_permanenti_rems"][chiave_unica]
+    except Exception:
+        pass
 
 colonne_giorni = st.columns(7)
 for idx, dt in enumerate(date_sett):
@@ -214,7 +209,7 @@ with tab2:
             else:
                 op_p = op
             html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{reg}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D; font-size:12px;'><b>{reg*ore_g} ore</b></td></tr>"
-    html_rep += "</table></div><br/>"
+    html_rep += "</table></div>"
     st.markdown(html_rep, unsafe_allow_html=True)
     
     if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
@@ -247,7 +242,7 @@ with tab2:
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.black))
                 ])
                 
-        w_rep = [160, 50, 50, 50, 110, 80]
+        w_rep = [160, 50, 50, 50, 110, 70]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")),
