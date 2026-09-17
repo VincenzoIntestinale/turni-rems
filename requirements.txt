@@ -1,4 +1,4 @@
 streamlit
-   pandas
-   reportlab
-   SQLAlchemy
+pandas
+reportlab
+SQLAlchemy
