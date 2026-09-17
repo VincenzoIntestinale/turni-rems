@@ -48,20 +48,20 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# Funzione blindata di lettura dal Cloud protetto di Streamlit
+# Funzione di lettura corretta e sincronizzata al formato di salvataggio
 def carica_turni_settimana(date_list):
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     try:
-        # Legge direttamente dalle impostazioni di sistema persistenti
-        archivio_cloud = st.secrets["turni_permanenti_rems"]
-        for dt in date_list:
-            k_g = dt.strftime("%Y-%m-%d")
-            for fas in FASCE:
-                f_p = fas.replace(" ", "").replace(":", "_").replace("-", "_")
-                for s in range(MAX_SLOTS):
-                    chiave_unica = f"{k_g}_{f_p}_{s}"
-                    if chiave_unica in archivio_cloud:
-                        dati[k_g][fas][s] = archivio_cloud[chiave_unica]
+        if "turni_permanenti_rems" in st.secrets:
+            archivio_cloud = st.secrets["turni_permanenti_rems"]
+            for dt in date_list:
+                k_g = dt.strftime("%Y-%m-%d")
+                for fas in FASCE:
+                    f_p = fas.replace(" ", "").replace(":", "_").replace("-", "_")
+                    for s in range(MAX_SLOTS):
+                        chiave_unica = f"{k_g}_{f_p}_{s}"
+                        if chiave_unica in archivio_cloud:
+                            dati[k_g][fas][s] = str(archivio_cloud[chiave_unica])
     except Exception:
         pass
     return dati
@@ -72,7 +72,7 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-# Funzione blindata di scrittura asincrona nel Cloud protetto
+# Funzione di salvataggio permanente istantaneo
 def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     scelta_attuale = st.session_state[chiave_widget]
     f_p = fascia.replace(" ", "").replace(":", "_").replace("-", "_")
@@ -175,7 +175,7 @@ with tab1:
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        w_cols = [90, 95, 95, 95, 95, 95, 95, 95]
+        w_cols = [95, 95, 95, 95, 95, 95, 95, 95]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
         elements_tab.append(t_table)
@@ -209,7 +209,7 @@ with tab2:
             else:
                 op_p = op
             html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{reg}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D; font-size:12px;'><b>{reg*ore_g} ore</b></td></tr>"
-    html_rep += "</table></div>"
+    html_rep += "</table></div><br/>"
     st.markdown(html_rep, unsafe_allow_html=True)
     
     if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
@@ -242,7 +242,7 @@ with tab2:
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.black))
                 ])
                 
-        w_rep = [160, 50, 50, 50, 110, 70]
+        w_rep = [160, 50, 50, 50, 140, 70]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")),
