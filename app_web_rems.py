@@ -46,7 +46,6 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# LETTURA SINCRONIZZATA DA GOOGLE SHEETS
 def carica_turni_settimana(date_list):
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     try:
@@ -77,7 +76,6 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-# SCRITTURA CUMULATIVA ASINCRONA NEL FOGLIO CONDIVISO
 def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     scelta_attuale = st.session_state[chiave_widget]
     f_p = fascia.replace(" ", "").replace(":", "_").replace("-", "_")
@@ -95,7 +93,6 @@ def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     except Exception:
         pass
 
-# COSTRUZIONE DELLA GRIGLIA INTERATTIVA A SCHERMO
 colonne_giorni = st.columns(7)
 for idx, dt in enumerate(date_sett):
     k_g = dt.strftime("%Y-%m-%d")
@@ -112,7 +109,6 @@ for idx, dt in enumerate(date_sett):
                     label=f"h_{ch_widget}", options=lista_ops, index=def_idx, key=ch_widget,
                     label_visibility="collapsed", on_change=salva_turno_callback, args=(ch_widget, k_g, fas, s)
                 )
-
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
@@ -144,7 +140,7 @@ with tab1:
     if st.button("🖨️ Genera PDF Tabellone Settimanale", key="gen_pdf_tab_btn", use_container_width=True):
         path_tab = "Tabellone_Turni_REMS.pdf"
         doc_tab = SimpleDocTemplate(path_tab, pagesize=landscape(letter), leftMargin=20, rightMargin=20, topMargin=20, bottomMargin=20)
-        elements_tab = []
+        elements_tab = list()
         styles_tab = getSampleStyleSheet()
         t_st_tab = ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=15)
         c_st_tab = ParagraphStyle('C', fontName='Helvetica', fontSize=8, alignment=1)
@@ -160,7 +156,7 @@ with tab1:
         r_idx = 1
         for fas in FASCE:
             bg_c = colors.HexColor("#FFF1E0") if "09:00" in fas else colors.HexColor("#F3E5F5")
-            testo_orario = "dalle ore 09:00<br/>alle ore 14:00" if "09:00" in fas else "dalle ore 15:00<br/>alle ore 20:00"
+            testo_orario = "dalle ore 09:00\nalle ore 14:00" if "09:00" in fas else "dalle ore 15:00\nalle ore 20:00"
             for s in range(MAX_SLOTS):
                 f_txt = testo_orario if s == 2 else ""
                 r = [Paragraph(f_txt, ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=8, alignment=1))]
@@ -175,7 +171,8 @@ with tab1:
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        w_cols = [100, 95, 95, 95, 95, 95, 95, 95]
+        # RIPRISTINATO: Misura orizzontale definita per 8 colonne (A4 Landscape)
+        w_cols = [110, 93, 93, 93, 93, 93, 93, 93]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
         elements_tab.append(t_table)
@@ -189,43 +186,56 @@ with tab2:
     g_n_it = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
     for idx, dt in enumerate(date_sett):
         k_g = dt.strftime("%Y-%m-%d")
-for fas in FASCE:
-    for s in range(MAX_SLOTS):
-        op = dati_turni[k_g][fas][s]
-        if op in t_c:
-            t_c[op] += 1
-        if g_n_it[idx] not in g_i[op]:
-            g_i[op].append(g_n_it[idx])
-    html_rep = f"REPORT - TURNI REMS - DAL {lun_str} AL {dom_str}"
-    html_rep += "OPERATOREORE S.PREV.EFF.GIORNI IMPIEGATIORE TOTALI"
+        for fas in FASCE:
+            for s in range(MAX_SLOTS):
+                op = dati_turni[k_g][fas][s]
+                if op in t_c:
+                    t_c[op] += 1
+                    if g_n_it[idx] not in g_i[op]: 
+                        g_i[op].append(g_n_it[idx])
+                    
+    html_rep = f"<div id='sez_stampa_rep'><h2 style='text-align:center; font-family:Arial; color:#1F538D;'>REPORT - PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {lun_str} AL {dom_str}</h2>"
+    html_rep += "<table style='width:100%; border-collapse:collapse; font-family:Arial;'><tr style='background-color:#1F538D; color:white;'><th style='padding:10px;'>OPERATORE</th><th style='padding:10px;'>ORE S.</th><th style='padding:10px;'>PREV.</th><th style='padding:10px;'>EFF.</th><th style='padding:10px;'>GIORNI IMPIEGATI</th><th style='padding:10px;'>ORE TOTALI</th></tr>"
     for op, (ore_g, da_f) in DB_OPERATORI.items():
         reg = t_c[op]
         sg = ", ".join(g_i[op]) if g_i[op] else "-"
         if reg > 0:
-            op_p = f"{op.split(' ')[0]}{op.split(' ')[1]}" if " " in op else op
-            html_rep += f"{op_p}{ore_g}{da_f}{reg}{sg}{reg*ore_g} ore"
-    html_rep += ""
+            op_p = f"{op.split(' ', 1)[0]}<br/>{op.split(' ', 1)[1]}" if " " in op else op
+            html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{reg}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D; font-size:12px;'><b>{reg*ore_g} ore</b></td></tr>"
+    html_rep += "</table></div><br/>"
     st.markdown(html_rep, unsafe_allow_html=True)
+    
     if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
         path_rep = "Report_Ore_REMS.pdf"
         doc_rep = SimpleDocTemplate(path_rep, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
-        elements_rep = []
+        elements_rep = list()
         styles_rep = getSampleStyleSheet()
         t_st_rep = ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=20)
         c_st_rep = ParagraphStyle('C', fontName='Helvetica', fontSize=9, alignment=1)
         h_st_rep = ParagraphStyle('H', fontName='Helvetica-Bold', fontSize=10, alignment=1, textColor=colors.white)
+        
         elements_rep.append(Paragraph(f"REPORT - PROGRAMMAZIONE TURNI REMS - DAL {lun_str} AL {dom_str}", t_st_rep))
-        headers_pdf = [Paragraph("OPERATORE", h_st_rep), Paragraph("ORE S.", h_st_rep), Paragraph("PREV.", h_st_rep), Paragraph("EFF.", h_st_rep), Paragraph("GIORNI", h_st_rep), Paragraph("ORE TOT.", h_st_rep)]
+        headers_pdf = [Paragraph("OPERATORE", h_st_rep), Paragraph("ORE S.", h_st_rep), Paragraph("PREV.", h_st_rep), Paragraph("EFF.", h_st_rep), Paragraph("GIORNI IMPIEGATI", h_st_rep), Paragraph("ORE TOT.", h_st_rep)]
         data_pdf = [headers_pdf]
+        
         for op, (ore_g, da_f) in DB_OPERATORI.items():
             reg = t_c[op]
             stringa_g = ", ".join(g_i[op]) if g_i[op] else "-"
             if reg > 0:
-                op_p = f"{op.split(' ')[0]}{op.split(' ')[1]}" if " " in op else op
-                data_pdf.append([Paragraph(op_p, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))])
-        w_rep = [140, 60, 60, 60, 110, 80]
+                op_p = f"{op.split(' ', 1)[0]}<br/>{op.split(' ', 1)[1]}" if " " in op else op
+                data_pdf.append([
+                    Paragraph(op_p, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),
+                    Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
+                    Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
+                ])
+        # RIPRISTINATO: Misura verticale definita per le 6 colonne (A4 Portrait)
+        w_rep = [140, 60, 60, 60, 150, 80]
         t_rep = Table(data_pdf, colWidths=w_rep)
-        t_rep.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),('BOTTOMPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6)]))
+        t_rep.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6)
+        ]))
         elements_rep.append(t_rep)
         doc_rep.build(elements_rep)
         with open(path_rep, "rb") as file:
