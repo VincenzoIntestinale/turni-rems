@@ -1,4 +1,0 @@
-streamlit
-pandas
-st-theme
-st-gsheets-connection
