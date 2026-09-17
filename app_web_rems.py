@@ -196,7 +196,7 @@ if g_n_it[idx] not in g_i[op]:
     for op, (ore_g, da_f) in DB_OPERATORI.items():reg = t_c[op]
     sg = ", ".join(g_i[op]) if g_i[op] else "-"
     if reg > 0:
-    op_p = f"{op.split(' ', 1)[0]}{op.split(' ', 1)[1]}" if " " in op else op
+        op_p = f"{op.split(' ', 1)[0]}{op.split(' ', 1)[1]}" if " " in op else op
     html_rep += f"{op_p}{ore_g}{da_f}{reg}{sg}{reg*ore_g} ore"
     html_rep += ""
     st.markdown(html_rep, unsafe_allow_html=True)
