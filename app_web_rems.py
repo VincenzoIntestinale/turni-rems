@@ -193,7 +193,8 @@ if g_n_it[idx] not in g_i[op]:
     g_i[op].append(g_n_it[idx])
     html_rep = f"REPORT - PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {lun_str} AL {dom_str}"
     html_rep += "OPERATOREORE S.PREV.EFF.GIORNI IMPIEGATIORE TOTALI"
-    for op, (ore_g, da_f) in DB_OPERATORI.items():reg = t_c[op]
+    for op, (ore_g, da_f) in DB_OPERATORI.items():
+        reg = t_c[op]
     sg = ", ".join(g_i[op]) if g_i[op] else "-"
     if reg > 0:
         op_p = f"{op.split(' ', 1)[0]}{op.split(' ', 1)[1]}" if " " in op else op
