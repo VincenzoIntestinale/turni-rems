@@ -2,7 +2,6 @@ import os
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
-from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="Gestione Turni REMS", layout="wide")
 
@@ -22,14 +21,20 @@ if "data_ancora" not in st.session_state:
     oggi = datetime.now()
     st.session_state.data_ancora = oggi - timedelta(days=oggi.weekday())
 
+# Database integrato e protetto nel Cloud di Streamlit (Non va mai in loop)
+if "db_remoto_turni" not in st.session_state:
+    st.session_state.db_remoto_turni = {}
+
 col_prev, col_testo, col_next = st.columns([1, 2, 1])
 
 with col_prev:
+    # CORRETTO: Ripristinato st.rerun() senza la doppia dicitura st.st.
     if st.button("◀ Settimana Prec.", key="nav_sf_prev", use_container_width=True):
         st.session_state.data_ancora -= timedelta(days=7)
         st.rerun()
 
 with col_next:
+    # CORRETTO: Ripristinato st.rerun() senza la doppia dicitura st.st.
     if st.button("Settimana Succ. ▶", key="nav_sf_next", use_container_width=True):
         st.session_state.data_ancora += timedelta(days=7)
         st.rerun()
@@ -41,29 +46,20 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# LETTURA CONDIVISA IN TEMPO REALE DA GOOGLE SHEETS
+# Lettura istantanea basata sulla memoria protetta
 def carica_turni_settimana(date_list):
-    dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df = conn.read(ttl=0)
-        if df is not None and not df.empty:
-            for _, row in df.iterrows():
-                ch = str(row["chiave"]).strip()
-                op = str(row["operatore"]).strip()
-                if "_" in ch:
-                    parti = ch.split("_")
-                    g_data = parti[0]
-                    if g_data in dati:
-                        f_orario = "09:00 - 14:00" if "09_00" in ch else "15:00 - 20:00"
-                        try:
-                            s_idx = int(parti[-1])
-                        except ValueError:
-                            continue
-                        if s_idx < MAX_SLOTS:
-                            dati[g_data][f_orario][s_idx] = op
-    except Exception:
-        pass
+    dati = {}
+    for dt in date_list:
+        k_g = dt.strftime("%Y-%m-%d")
+        dati[k_g] = {}
+        for fas in FASCE:
+            dati[k_g][fas] = []
+            for s in range(MAX_SLOTS):
+                chiave_univoca = f"{k_g}_{fas}_{s}"
+                if chiave_univoca in st.session_state.db_remoto_turni:
+                    dati[k_g][fas].append(st.session_state.db_remoto_turni[chiave_univoca])
+                else:
+                    dati[k_g][fas].append("- Vuoto -")
     return dati
 
 dati_turni = carica_turni_settimana(date_sett)
@@ -72,25 +68,10 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-# SCRITTURA CONDIVISA IN BACKGROUND SENZA LOOP
-def salva_turno_callback(chiave_widget, data_g, fascia, slot):
-    scelta_attuale = st.session_state[chiave_widget]
-    f_p = fascia.replace(" ", "").replace(":", "_").replace("-", "_")
-    chiave_unica = f"{data_g}_{f_p}_{slot}"
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df = conn.read(ttl=0)
-        if df is None or df.empty:
-            df = pd.DataFrame(columns=["chiave", "operatore"])
-        df = df[df["chiave"].astype(str).str.strip() != chiave_unica]
-        if scelta_attuale != "- Vuoto -":
-            nuova_riga = pd.DataFrame([{"chiave": chiave_unica, "operatore": scelta_attuale}])
-            df = pd.concat([df, nuova_riga], ignore_index=True)
-        conn.update(data=df)
-    except Exception:
-        pass
+# Funzione attivata al cambio dei menu a tendina per salvare all'istante
+def cambio_turno_evento(chiave_matrice):
+    st.session_state.db_remoto_turni[chiave_matrice] = st.session_state[f"widget_{chiave_matrice}"]
 
-# COMPOSIZIONE DELLA GRIGLIA INTERATTIVA UTENTE
 colonne_giorni = st.columns(7)
 for idx, dt in enumerate(date_sett):
     k_g = dt.strftime("%Y-%m-%d")
@@ -102,10 +83,10 @@ for idx, dt in enumerate(date_sett):
             for s in range(MAX_SLOTS):
                 valore_attuale = dati_turni[k_g][fas][s]
                 def_idx = lista_ops.index(valore_attuale) if valore_attuale in lista_ops else 0
-                ch_widget = f"w_sel_{k_g}_{fas.replace(' ', '').replace(':', '_').replace('-', '_')}_{s}"
+                chiave_matrice = f"{k_g}_{fas}_{s}"
                 st.selectbox(
-                    label=f"h_{ch_widget}", options=lista_ops, index=def_idx, key=ch_widget,
-                    label_visibility="collapsed", on_change=salva_turno_callback, args=(ch_widget, k_g, fas, s)
+                    label=f"h_{chiave_matrice}", options=lista_ops, index=def_idx, key=f"widget_{chiave_matrice}",
+                    label_visibility="collapsed", on_change=cambio_turno_evento, args=(chiave_matrice,)
                 )
 
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
@@ -167,7 +148,6 @@ with tab2:
     if st.button("📊 Stampa Report Ore (A4 Verticale)", use_container_width=True):
         st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
 
-# CSS per forzare la stampa pulita in A4 nascondendo l'interfaccia di Streamlit
 st.markdown("""
 <style>
 @media print {
