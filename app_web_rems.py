@@ -46,7 +46,6 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# Connessione al database SQL interno di Streamlit Cloud
 conn = st.connection("sql")
 
 with conn.session as session:
@@ -129,7 +128,7 @@ with tab1:
                 v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
                 if " " in v and v != "- Vuoto -":
                     parti_nome = v.split(" ", 1)
-                    v_p = f"{parti_nome[0]}<br/>{parti_nome[1]}" if len(parti_nome) > 1 else v
+                    v_p = f"{parti_nome[0]}<br/>{parti_nome[1]}"
                 else:
                     v_p = v if v != "- Vuoto -" else ""
                 html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black;'>{v_p}</td>"
@@ -164,8 +163,8 @@ with tab1:
                     v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
                     testo_pulito = v if v != "- Vuoto -" else ""
                     if " " in testo_pulito:
-                        p_n = testo_pulito.split(" ", 1)
-                        testo_pulito = f"{p_n[0]}<br/>{p_n[1]}" if len(p_n) > 1 else testo_pulito
+                        parti_n = testo_pulito.split(" ", 1)
+                        testo_pulito = f"{parti_n[0]}<br/>{parti_n[1]}"
                     r.append(Paragraph(testo_pulito, c_st_tab))
                 data_pdf.append(r)
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
@@ -183,57 +182,47 @@ with tab2:
     t_c = {n: 0 for n in DB_OPERATORI.keys()}
     g_i = {n: list() for n in DB_OPERATORI.keys()}
     g_n_it = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
+    
     for idx, dt in enumerate(date_sett):
         k_g = dt.strftime("%Y-%m-%d")
-for fas in FASCE:
-    for s in range(MAX_SLOTS):
-        op = dati_turni[k_g][fas][s]
-        # PROTEZIONE DI SICUREZZA: Esegue l'analisi solo se l'operatore appartiene al DB reale 
-        if op in t_c:
-            t_c[op] += 1
-            if g_n_it[idx] not in g_i[op]:
-                g_i[op].append(g_n_it[idx])
-            html_rep = f"REPORT - PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {lun_str} AL {dom_str}"
-            html_rep += "OPERATOREORE S.PREV.EFF.GIORNI IMPIEGATIORE TOTALI"
-            for op, (ore_g, da_f) in DB_OPERATORI.items():
-                reg = t_c[op]
-                sg = ", ".join(g_i[op]) if g_i[op] else "-"
-                if reg > 0:
-                    if " " in op:
-                        parti_op = op.split(" ", 1)
-                        op_p = f"{parti_op[0]}{parti_op[1]}" if len(parti_op) > 1 else op
-                    else:
-                        op_p = op
-                    html_rep += f"{op_p}{ore_g}{da_f}{reg}{sg}{reg*ore_g} ore"
-            html_rep += ""
-            st.markdown(html_rep, unsafe_allow_html=True)
-    if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
-        path_rep = "Report_Ore_REMS.pdf"
-        doc_rep = SimpleDocTemplate(path_rep, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
-        elements_rep = list()
-        styles_rep = getSampleStyleSheet()
-        t_st_rep = ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=20)
-        c_st_rep = ParagraphStyle('C', fontName='Helvetica', fontSize=9, alignment=1)
-        h_st_rep = ParagraphStyle('H', fontName='Helvetica-Bold', fontSize=10, alignment=1, textColor=colors.white)
-        elements_rep.append(Paragraph(f"REPORT - PROGRAMMAZIONE TURNI REMS - DAL {lun_str} AL {dom_str}", t_st_rep))
-        headers_pdf = [Paragraph("OPERATORE", h_st_rep), Paragraph("ORE S.", h_st_rep), Paragraph("PREV.", h_st_rep), Paragraph("EFF.", h_st_rep), Paragraph("GIORNI IMPIEGATI", h_st_rep), Paragraph("ORE TOT.", h_st_rep)]
-        data_pdf = [headers_pdf]
-        for op, (ore_g, da_f) in DB_OPERATORI.items():
-            reg = t_c[op]
-            stringa_g = ", ".join(g_i[op]) if g_i[op] else "-"
-            if reg > 0:
-                if " " in op:
-                    parti_op = op.split(" ", 1)
-                    op_p = f"{parti_op[0]}{parti_op[1]}" if len(parti_op) > 1 else op
-                else:
-                    op_p = op
-                data_pdf.append([Paragraph(op_p, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))])
-        w_rep = [140, 55, 55, 55, 140, 70]
-        t_rep = Table(data_pdf, colWidths=w_rep)
-        t_rep.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),('BOTTOMPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6)]))
-        elements_rep.append(t_rep)
-        doc_rep.build(elements_rep)
-        with open(path_rep, "rb") as file:
-            st.download_button(label="📥 Scarica il PDF del Report Ore", data=file, 
-                               file_name=f"Report_Ore_{lun_str.replace('/', '_')}.pdf", mime="application/pdf", 
-                               use_container_width=True)
+        for fas in FASCE:
+            for s in range(MAX_SLOTS):
+                op = dati_turni[k_g][fas][s]
+if op in t_c:t_c[op] += 1
+if g_n_it[idx] not in g_i[op]:
+    g_i[op].append(g_n_it[idx])
+    html_rep = f"REPORT - PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {lun_str} AL {dom_str}"
+    html_rep += "OPERATOREORE S.PREV.EFF.GIORNI IMPIEGATIORE TOTALI"
+    for op, (ore_g, da_f) in DB_OPERATORI.items():reg = t_c[op]
+    sg = ", ".join(g_i[op]) if g_i[op] else "-"
+    if reg > 0:
+    op_p = f"{op.split(' ', 1)[0]}{op.split(' ', 1)[1]}" if " " in op else op
+    html_rep += f"{op_p}{ore_g}{da_f}{reg}{sg}{reg*ore_g} ore"
+    html_rep += ""
+    st.markdown(html_rep, unsafe_allow_html=True)
+    if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", 
+                 use_container_width=True):path_rep = "Report_Ore_REMS.pdf"
+    doc_rep = SimpleDocTemplate(path_rep, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
+    elements_rep = list()
+    styles_rep = getSampleStyleSheet()
+    t_st_rep = ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=20)
+    c_st_rep = ParagraphStyle('C', fontName='Helvetica', fontSize=9, alignment=1)
+    h_st_rep = ParagraphStyle('H', fontName='Helvetica-Bold', fontSize=10, alignment=1, textColor=colors.white)
+    elements_rep.append(Paragraph(f"REPORT - PROGRAMMAZIONE TURNI REMS - DAL {lun_str} AL {dom_str}", t_st_rep))
+    headers_pdf = [Paragraph("OPERATORE", h_st_rep), Paragraph("ORE S.", h_st_rep), Paragraph("PREV.", h_st_rep), Paragraph("EFF.", h_st_rep), Paragraph("GIORNI IMPIEGATI", h_st_rep), Paragraph("ORE TOT.", h_st_rep)]
+    data_pdf = [headers_pdf]
+    for op, (ore_g, da_f) in DB_OPERATORI.items():
+        reg = t_c[op]
+        stringa_g = ", ".join(g_i[op]) if g_i[op] else "-"
+        if reg > 0:
+            op_p = f"{op.split(' ', 1)[0]}{op.split(' ', 1)[1]}" if " " in op else op
+            data_pdf.append([Paragraph(op_p, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))])
+    w_rep = [140, 55, 55, 55, 140, 75]
+    t_rep = Table(data_pdf, colWidths=w_rep)
+    t_rep.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),('BOTTOMPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6)]))
+    elements_rep.append(t_rep)
+    doc_rep.build(elements_rep)
+    with open(path_rep, "rb") as file:
+        st.download_button(label="📥 Scarica il PDF del Report Ore", data=file, 
+                           file_name=f"Report_Ore_{lun_str.replace('/', '_')}.pdf", 
+                           mime="application/pdf", use_container_width=True)
