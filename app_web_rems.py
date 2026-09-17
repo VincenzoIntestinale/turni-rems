@@ -160,7 +160,7 @@ with tab1:
         r_idx = 1
         for fas in FASCE:
             bg_c = colors.HexColor("#FFF1E0") if "09:00" in fas else colors.HexColor("#F3E5F5")
-            testo_orario = "dalle ore 09:00<br/>alle ore 14:00" if "09:00" in fas else "dalle ore 15:00<br/>alle ore 20:00"
+            testo_orario = "MATTINO <br/>dalle ore 09:00<br/>alle ore 14:00" if "09:00" in fas else "POMERIGGIO <br/>dalle ore 15:00<br/>alle ore 20:00"
             for s in range(MAX_SLOTS):
                 f_txt = testo_orario if s == 2 else ""
                 r = [Paragraph(f_txt, ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=8, alignment=1))]
