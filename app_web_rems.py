@@ -2,11 +2,7 @@ import os
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
-
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="Gestione Turni REMS", layout="wide")
 
@@ -45,19 +41,24 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
+# LETTURA DEFINITIVA E SICURA DA GOOGLE SHEETS
 def carica_turni_settimana(date_list):
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     try:
-        if "turni_permanenti_rems" in st.secrets:
-            archivio_cloud = st.secrets["turni_permanenti_rems"]
-            for dt in date_list:
-                k_g = dt.strftime("%Y-%m-%d")
-                for fas in FASCE:
-                    f_pulita = fas.replace(" ", "").replace(":", "_").replace("-", "_")
-                    for s in range(MAX_SLOTS):
-                        chiave_unica = f"{k_g}_{f_pulita}_{s}"
-                        if chiave_unica in archivio_cloud:
-                            dati[k_g][fas][s] = str(archivio_cloud[chiave_unica])
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(ttl=0)
+        if df is not None and not df.empty:
+            for _, row in df.iterrows():
+                ch = str(row["chiave"]).strip()
+                op = str(row["operatore"]).strip()
+                if "_" in ch:
+                    parti = ch.split("_")
+                    g_data = parti[0]
+                    if g_data in dati:
+                        f_orario = f"{parti[1]}:{parti[2]} - {parti[3]}:{parti[4]}"
+                        s_idx = int(parti[5])
+                        if f_orario in dati[g_data] and s_idx < MAX_SLOTS:
+                            dati[g_data][f_orario][s_idx] = op
     except Exception:
         pass
     return dati
@@ -68,16 +69,25 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
+# SALVATAGGIO DEFINITIVO E CUMULATIVO SU GOOGLE SHEETS
 def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     scelta_attuale = st.session_state[chiave_widget]
-    f_pulita = fascia.replace(" ", "").replace(":", "_").replace("-", "_")
-    chiave_unica = f"{data_g}_{f_pulita}_{slot}"
+    f_p = fascia.replace(" ", "").replace(":", "_").replace("-", "_")
+    chiave_unica = f"{data_g}_{f_p}_{slot}"
+    
     try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df = conn.read(ttl=0)
+        if df is None or df.empty:
+            df = pd.DataFrame(columns=["chiave", "operatore"])
+            
+        df = df[df["chiave"].astype(str).str.strip() != chiave_unica]
+        
         if scelta_attuale != "- Vuoto -":
-            st.secrets["turni_permanenti_rems"][chiave_unica] = scelta_attuale
-        else:
-            if chiave_unica in st.secrets["turni_permanenti_rems"]:
-                del st.secrets["turni_permanenti_rems"][chiave_unica]
+            nuova_riga = pd.DataFrame([{"chiave": chiave_unica, "operatore": scelta_attuale}])
+            df = pd.concat([df, nuova_riga], ignore_index=True)
+            
+        conn.update(data=df)
     except Exception:
         pass
 
@@ -89,9 +99,11 @@ for idx, dt in enumerate(date_sett):
         for fas in FASCE:
             bg_c = "#FFF1E0" if "09:00" in fas else "#F3E5F5"
             st.markdown(f"<div style='background-color:{bg_c}; padding:4px; margin-top:8px; border-radius:4px; text-align:center; font-size:11px; font-weight:bold; color:#333; font-family:Arial;'>🕒 {fas}</div>", unsafe_allow_html=True)
+            
             for s in range(MAX_SLOTS):
                 valore_attuale = dati_turni[k_g][fas][s]
                 def_idx = lista_ops.index(valore_attuale) if valore_attuale in lista_ops else 0
+                
                 ch_widget = f"w_sel_{k_g}_{fas.replace(' ', '').replace(':', '_').replace('-', '_')}_{s}"
                 st.selectbox(
                     label=f"h_{ch_widget}",
@@ -152,7 +164,7 @@ with tab1:
         r_idx = 1
         for fas in FASCE:
             bg_c = colors.HexColor("#FFF1E0") if "09:00" in fas else colors.HexColor("#F3E5F5")
-            testo_orario = "dalle ore 09:00\nalle ore 14:00" if "09:00" in fas else "dalle ore 15:00\nalle ore 20:00"
+            testo_orario = "dalle ore 09:00<br/>alle ore 14:00" if "09:00" in fas else "dalle ore 15:00<br/>alle ore 20:00"
             for s in range(MAX_SLOTS):
                 f_txt = testo_orario if s == 2 else ""
                 r = [Paragraph(f_txt, ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=8, alignment=1, textColor=colors.black))]
@@ -167,7 +179,7 @@ with tab1:
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        w_cols = [100, 85, 85, 85, 85, 85, 85, 85]
+        w_cols = [95, 93, 93, 93, 93, 93, 93, 93]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
         elements_tab.append(t_table)
@@ -187,8 +199,7 @@ with tab2:
                 op = dati_turni[k_g][fas][s]
                 if op in t_c:
                     t_c[op] += 1
-                    if g_n_it[idx] not in g_i[op]:
-                        g_i[op].append(g_n_it[idx])
+                    if g_n_it[idx] not in g_i[op]: g_i[op].append(g_n_it[idx])
                     
     html_rep = f"<div id='sez_stampa_rep'><h2 style='text-align:center; font-family:Arial; color:#1F538D;'>REPORT - PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {lun_str} AL {dom_str}</h2>"
     html_rep += "<table style='width:100%; border-collapse:collapse; font-family:Arial;'><tr style='background-color:#1F538D; color:white;'><th style='padding:10px;'>OPERATORE</th><th style='padding:10px;'>ORE S.</th><th style='padding:10px;'>PREV.</th><th style='padding:10px;'>EFF.</th><th style='padding:10px;'>GIORNI IMPIEGATI</th><th style='padding:10px;'>ORE TOTALI</th></tr>"
@@ -235,7 +246,7 @@ with tab2:
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.black))
                 ])
                 
-        w_rep = [150, 50, 50, 50, 150, 70]
+        w_rep = [160, 50, 50, 50, 140, 70]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")),
@@ -250,4 +261,3 @@ with tab2:
         
         with open(path_rep, "rb") as file:
             st.download_button(label="📥 Scarica il PDF del Report Ore", data=file, file_name=f"Report_Ore_{lun_str.replace('/', '_')}.pdf", mime="application/pdf", use_container_width=True)
-
