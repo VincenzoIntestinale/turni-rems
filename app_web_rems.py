@@ -46,7 +46,7 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# LETTURA ALLINEATA DA GOOGLE SHEETS
+# LETTURA COMPLETA DA GOOGLE SHEETS
 def carica_turni_settimana(date_list):
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     try:
@@ -61,7 +61,10 @@ def carica_turni_settimana(date_list):
                     g_data = parti[0]
                     if g_data in dati:
                         f_orario = "09:00 - 14:00" if "09_00" in ch else "15:00 - 20:00"
-                        s_idx = int(parti[-1])
+                        try:
+                            s_idx = int(parti[-1])
+                        except ValueError:
+                            continue
                         if s_idx < MAX_SLOTS:
                             dati[g_data][f_orario][s_idx] = op
     except Exception:
@@ -74,7 +77,7 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-# SCRITTURA ALLINEATA IN TEMPO REALE
+# SCRITTURA COMPLETA NEL FOGLIO CONDIVISO
 def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     scelta_attuale = st.session_state[chiave_widget]
     f_p = fascia.replace(" ", "").replace(":", "_").replace("-", "_")
@@ -92,6 +95,7 @@ def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     except Exception:
         pass
 
+# COSTRUZIONE GRIGLIA A SCHERMO
 colonne_giorni = st.columns(7)
 for idx, dt in enumerate(date_sett):
     k_g = dt.strftime("%Y-%m-%d")
@@ -163,13 +167,14 @@ with tab1:
                     v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
                     testo_pulito = v if v != "- Vuoto -" else ""
                     if " " in testo_pulito:
-                        parti_n = testo_pulito.split(" ", 1)
-                        testo_pulito = f"{parti_n[0]}<br/>{parti_n[1]}"
+                        p_n = testo_pulito.split(" ", 1)
+                        testo_pulito = f"{p_n[0]}<br/>{p_n[1]}"
                     r.append(Paragraph(testo_pulito, c_st_tab))
                 data_pdf.append(r)
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
+        # CORRETTO: Misure fisse in pixel (A4 Orizzontale)
         w_cols = [110, 92, 92, 92, 92, 92, 92, 92]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
@@ -189,10 +194,9 @@ with tab2:
                 op = dati_turni[k_g][fas][s]
                 if op in t_c:
                     t_c[op] += 1
-                    if g_n_it[idx] not in g_i[op]: 
-                        g_i[op].append(g_n_it[idx])
+                    if g_n_it[idx] not in g_i[op]: g_i[op].append(g_n_it[idx])
                     
-    html_rep = f"<div id='sez_stampa_rep'><h2 style='text-align:center; font-family:Arial; color:#1F538D;'>REPORT - PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {lun_str} AL {dom_str}</h2>"
+    html_rep = f"<div id='sez_stampa_rep'><h2 style='text-align:center; font-family:Arial; color:#1F538D;'>REPORT - TURNI REMS - DAL {lun_str} AL {dom_str}</h2>"
     html_rep += "<table style='width:100%; border-collapse:collapse; font-family:Arial;'><tr style='background-color:#1F538D; color:white;'><th style='padding:10px;'>OPERATORE</th><th style='padding:10px;'>ORE S.</th><th style='padding:10px;'>PREV.</th><th style='padding:10px;'>EFF.</th><th style='padding:10px;'>GIORNI IMPIEGATI</th><th style='padding:10px;'>ORE TOTALI</th></tr>"
     for op, (ore_g, da_f) in DB_OPERATORI.items():
         reg = t_c[op]
@@ -226,7 +230,8 @@ with tab2:
                     Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
                 ])
-        w_rep = [140, 50, 50, 50, 160, 70]
+        # CORRETTO: Misure fisse in pixel (A4 Verticale)
+        w_rep = [140, 55, 55, 55, 140, 75]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
