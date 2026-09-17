@@ -32,12 +32,12 @@ col_prev, col_testo, col_next = st.columns([1, 2, 1])
 with col_prev:
     if st.button("◀ Settimana Prec.", key="nav_sf_prev", use_container_width=True):
         st.session_state.data_ancora -= timedelta(days=7)
-        st.rerun()
+        st.st.rerun()
 
 with col_next:
     if st.button("Settimana Succ. ▶", key="nav_sf_next", use_container_width=True):
         st.session_state.data_ancora += timedelta(days=7)
-        st.rerun()
+        st.st.rerun()
 
 date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
 lun_str = date_sett[0].strftime('%d/%m/%Y')
@@ -46,6 +46,7 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
+# LETTURA CONDIVISA IN TEMPO REALE DA GOOGLE SHEETS
 def carica_turni_settimana(date_list):
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     try:
@@ -59,9 +60,13 @@ def carica_turni_settimana(date_list):
                     parti = ch.split("_")
                     g_data = parti[0]
                     if g_data in dati:
-                        f_orario = f"{parti[1]}:{parti[2]} - {parti[3]}:{parti[4]}"
-                        s_idx = int(parti[5])
-                        if f_orario in dati[g_data] and s_idx < MAX_SLOTS:
+                        # Ricostruisce la fascia oraria originale basandosi sulla chiave pulita
+                        f_orario = "09:00 - 14:00" if "09_00" in ch else "15:00 - 20:00"
+                        try:
+                            s_idx = int(parti[-1])
+                        except ValueError:
+                            continue
+                        if s_idx < MAX_SLOTS:
                             dati[g_data][f_orario][s_idx] = op
     except Exception:
         pass
@@ -73,6 +78,7 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
+# SCRITTURA CUMULATIVA ASINCRONA NEL FOGLIO CONDIVISO
 def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     scelta_attuale = st.session_state[chiave_widget]
     f_p = fascia.replace(" ", "").replace(":", "_").replace("-", "_")
@@ -90,6 +96,7 @@ def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     except Exception:
         pass
 
+# COSTRUZIONE DELLA GRIGLIA INTERATTIVA A SCHERMO
 colonne_giorni = st.columns(7)
 for idx, dt in enumerate(date_sett):
     k_g = dt.strftime("%Y-%m-%d")
@@ -125,11 +132,7 @@ with tab1:
             html_tab += f"<tr style='background-color:{bg}; text-align:center;'><td style='padding:6px; border:1px solid #ddd; font-size:11px;'>{f_txt}</td>"
             for dt in date_sett:
                 v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
-                if " " in v and v != "- Vuoto -":
-                    parti_nome = v.split(" ", 1)
-                    v_p = f"{parti_nome[0]}<br/>{parti_nome[1]}"
-                else:
-                    v_p = v if v != "- Vuoto -" else ""
+                v_p = f"{v.split(' ')[0]}<br/>{v.split(' ')[1]}" if " " in v and v != "- Vuoto -" else (v if v != "- Vuoto -" else "")
                 html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black;'>{v_p}</td>"
             html_tab += "</tr>"
     html_tab += "</table></div><br/>"
@@ -154,22 +157,19 @@ with tab1:
         r_idx = 1
         for fas in FASCE:
             bg_c = colors.HexColor("#FFF1E0") if "09:00" in fas else colors.HexColor("#F3E5F5")
-            testo_orario = "dalle ore 09:00<br/>alle ore 14:00" if "09:00" in fas else "dalle ore 15:00<br/>alle ore 20:00"
+            testo_orario = "dalle ore 09:00\nalle ore 14:00" if "09:00" in fas else "dalle ore 15:00\nalle ore 20:00"
             for s in range(MAX_SLOTS):
                 f_txt = testo_orario if s == 2 else ""
                 r = [Paragraph(f_txt, ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=8, alignment=1))]
                 for dt in date_sett:
                     v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
-                    testo_pulito = v if v != "- Vuoto -" else ""
-                    if " " in testo_pulito:
-                        p_n = testo_pulito.split(" ", 1)
-                        testo_pulito = f"{p_n[0]}<br/>{p_n[1]}"
+                    testo_pulito = f"{v.split(' ')[0]}<br/>{v.split(' ')[1]}" if " " in v and v != "- Vuoto -" else (v if v != "- Vuoto -" else "")
                     r.append(Paragraph(testo_pulito, c_st_tab))
                 data_pdf.append(r)
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        t_table = Table(data_pdf, colWidths=[90, 80, 80, 80, 80, 80, 80, 80])
+        t_table = Table(data_pdf, colWidths=[90, 85, 85, 85, 85, 85, 85, 85])
         t_table.setStyle(TableStyle(r_styles))
         elements_tab.append(t_table)
         doc_tab.build(elements_tab)
@@ -185,20 +185,17 @@ with tab2:
         for fas in FASCE:
             for s in range(MAX_SLOTS):
                 op = dati_turni[k_g][fas][s]
-                if op in t_c:
-                    t_c[op] += 1
-                    if g_n_it[idx] not in g_i[op]: g_i[op].append(g_n_it[idx])
+    if op in t_c:
+        t_c[op] += 1
+    if g_n_it[idx] not in g_i[op]:
+        g_i[op].append(g_n_it[idx])
 html_rep = f"REPORT - PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {lun_str} AL {dom_str}"
 html_rep += "OPERATOREORE S.PREV.EFF.GIORNI IMPIEGATIORE TOTALI"
 for op, (ore_g, da_f) in DB_OPERATORI.items():
     reg = t_c[op]
     sg = ", ".join(g_i[op]) if g_i[op] else "-"
     if reg > 0:
-        if " " in op:
-            parti_op = op.split(" ", 1)
-            op_p = f"{parti_op[0]}{parti_op[1]}"
-        else:
-            op_p = op
+        op_p = f"{op.split(' ')[0]}{op.split(' ')[1]}" if " " in op else op
         html_rep += f"{op_p}{ore_g}{da_f}{reg}{sg}{reg*ore_g} ore"
 html_rep += ""
 st.markdown(html_rep, unsafe_allow_html=True)
@@ -217,13 +214,9 @@ if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_
         reg = t_c[op]
         stringa_g = ", ".join(g_i[op]) if g_i[op] else "-"
         if reg > 0:
-            if " " in op:
-                parti_op = op.split(" ", 1)
-                op_p = f"{parti_op[0]}{parti_op[1]}"
-            else:
-                op_p = op
+            op_p = f"{op.split(' ')[0]}{op.split(' ')[1]}" if " " in op else op
             data_pdf.append([Paragraph(op_p, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))])
-    t_rep = Table(data_pdf, colWidths=[160, 50, 50, 50, 110, 70])
+    t_rep = Table(data_pdf, colWidths=[160, 50, 50, 50, 120, 70])
     t_rep.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),('BOTTOMPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6)]))
     elements_rep.append(t_rep)
     doc_rep.build(elements_rep)
