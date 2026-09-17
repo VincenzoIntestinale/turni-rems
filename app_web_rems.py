@@ -46,6 +46,7 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
+# LETTURA ALLINEATA DA GOOGLE SHEETS
 def carica_turni_settimana(date_list):
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     try:
@@ -60,10 +61,7 @@ def carica_turni_settimana(date_list):
                     g_data = parti[0]
                     if g_data in dati:
                         f_orario = "09:00 - 14:00" if "09_00" in ch else "15:00 - 20:00"
-                        try:
-                            s_idx = int(parti[-1])
-                        except ValueError:
-                            continue
+                        s_idx = int(parti[-1])
                         if s_idx < MAX_SLOTS:
                             dati[g_data][f_orario][s_idx] = op
     except Exception:
@@ -76,6 +74,7 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
+# SCRITTURA ALLINEATA IN TEMPO REALE
 def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     scelta_attuale = st.session_state[chiave_widget]
     f_p = fascia.replace(" ", "").replace(":", "_").replace("-", "_")
@@ -156,7 +155,7 @@ with tab1:
         r_idx = 1
         for fas in FASCE:
             bg_c = colors.HexColor("#FFF1E0") if "09:00" in fas else colors.HexColor("#F3E5F5")
-            testo_orario = "dalle ore 09:00\nalle ore 14:00" if "09:00" in fas else "dalle ore 15:00\nalle ore 20:00"
+            testo_orario = "dalle ore 09:00<br/>alle ore 14:00" if "09:00" in fas else "dalle ore 15:00<br/>alle ore 20:00"
             for s in range(MAX_SLOTS):
                 f_txt = testo_orario if s == 2 else ""
                 r = [Paragraph(f_txt, ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=8, alignment=1))]
@@ -164,15 +163,14 @@ with tab1:
                     v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
                     testo_pulito = v if v != "- Vuoto -" else ""
                     if " " in testo_pulito:
-                        p_n = testo_pulito.split(" ", 1)
-                        testo_pulito = f"{p_n[0]}<br/>{p_n[1]}"
+                        parti_n = testo_pulito.split(" ", 1)
+                        testo_pulito = f"{parti_n[0]}<br/>{parti_n[1]}"
                     r.append(Paragraph(testo_pulito, c_st_tab))
                 data_pdf.append(r)
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        # RIPRISTINATO: Misura orizzontale definita per 8 colonne (A4 Landscape)
-        w_cols = [110, 93, 93, 93, 93, 93, 93, 93]
+        w_cols = [110, 92, 92, 92, 92, 92, 92, 92]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
         elements_tab.append(t_table)
@@ -228,8 +226,7 @@ with tab2:
                     Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
                 ])
-        # RIPRISTINATO: Misura verticale definita per le 6 colonne (A4 Portrait)
-        w_rep = [140, 60, 60, 60, 150, 80]
+        w_rep = [140, 50, 50, 50, 160, 70]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
