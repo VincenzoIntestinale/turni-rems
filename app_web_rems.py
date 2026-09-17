@@ -45,7 +45,6 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# LETTURA SINCRONIZZATA DAL CLOUD DEI SECRETS
 def carica_turni_settimana(date_list):
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     try:
@@ -69,12 +68,10 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-# SCRITTURA CORRETTA SENZA LISTE CORROTTE
 def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     scelta_attuale = st.session_state[chiave_widget]
     f_pulita = fascia.replace(" ", "").replace(":", "_").replace("-", "_")
     chiave_unica = f"{data_g}_{f_pulita}_{slot}"
-    
     try:
         if scelta_attuale != "- Vuoto -":
             st.secrets["turni_permanenti_rems"][chiave_unica] = scelta_attuale
@@ -92,11 +89,9 @@ for idx, dt in enumerate(date_sett):
         for fas in FASCE:
             bg_c = "#FFF1E0" if "09:00" in fas else "#F3E5F5"
             st.markdown(f"<div style='background-color:{bg_c}; padding:4px; margin-top:8px; border-radius:4px; text-align:center; font-size:11px; font-weight:bold; color:#333; font-family:Arial;'>🕒 {fas}</div>", unsafe_allow_html=True)
-            
             for s in range(MAX_SLOTS):
                 valore_attuale = dati_turni[k_g][fas][s]
                 def_idx = lista_ops.index(valore_attuale) if valore_attuale in lista_ops else 0
-                
                 ch_widget = f"w_sel_{k_g}_{fas.replace(' ', '').replace(':', '_').replace('-', '_')}_{s}"
                 st.selectbox(
                     label=f"h_{ch_widget}",
@@ -172,7 +167,7 @@ with tab1:
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        w_cols = [100, 85, 85, 85, 85, 85, 85, 85]
+        w_cols = [110, 90, 90, 90, 90, 90, 90, 90]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
         elements_tab.append(t_table)
@@ -192,7 +187,8 @@ with tab2:
                 op = dati_turni[k_g][fas][s]
                 if op in t_c:
                     t_c[op] += 1
-                    if g_n_it[idx] not in g_i[op]: g_i[op].append(g_n_it[idx])
+                    if g_n_it[idx] not in g_i[op]:
+                        g_i[op].append(g_n_it[idx])
                     
     html_rep = f"<div id='sez_stampa_rep'><h2 style='text-align:center; font-family:Arial; color:#1F538D;'>REPORT - PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {lun_str} AL {dom_str}</h2>"
     html_rep += "<table style='width:100%; border-collapse:collapse; font-family:Arial;'><tr style='background-color:#1F538D; color:white;'><th style='padding:10px;'>OPERATORE</th><th style='padding:10px;'>ORE S.</th><th style='padding:10px;'>PREV.</th><th style='padding:10px;'>EFF.</th><th style='padding:10px;'>GIORNI IMPIEGATI</th><th style='padding:10px;'>ORE TOTALI</th></tr>"
@@ -239,7 +235,7 @@ with tab2:
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.black))
                 ])
                 
-        w_rep = [160, 55, 55, 55, 110, 75]
+        w_rep = [160, 60, 60, 60, 110, 70]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")),
