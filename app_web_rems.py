@@ -46,7 +46,6 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# MOTORE DI LETTURA BLINDATO DA GOOGLE SHEETS
 def carica_turni_settimana(date_list):
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     try:
@@ -74,7 +73,6 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-# MOTORE DI SCRITTURA CONDIVISO SENZA LOOP
 def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     scelta_attuale = st.session_state[chiave_widget]
     f_p = fascia.replace(" ", "").replace(":", "_").replace("-", "_")
@@ -106,7 +104,7 @@ for idx, dt in enumerate(date_sett):
                 ch_widget = f"w_sel_{k_g}_{fas.replace(' ', '').replace(':', '_').replace('-', '_')}_{s}"
                 st.selectbox(
                     label=f"h_{ch_widget}", options=lista_ops, index=def_idx, key=ch_widget,
-                    label_visibility="collapsed", on_change=save_turno_callback if 'save_turno_callback' in globals() else salva_turno_callback, args=(ch_widget, k_g, fas, s)
+                    label_visibility="collapsed", on_change=salva_turno_callback, args=(ch_widget, k_g, fas, s)
                 )
 
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
@@ -127,7 +125,11 @@ with tab1:
             html_tab += f"<tr style='background-color:{bg}; text-align:center;'><td style='padding:6px; border:1px solid #ddd; font-size:11px;'>{f_txt}</td>"
             for dt in date_sett:
                 v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
-                v_p = f"{v.split(' ')[0]}<br/>{v.split(' ')[1]}" if " " in v and v != "- Vuoto -" else (v if v != "- Vuoto -" else "")
+                if " " in v and v != "- Vuoto -":
+                    parti_nome = v.split(" ", 1)
+                    v_p = f"{parti_nome[0]}<br/>{parti_nome[1]}"
+                else:
+                    v_p = v if v != "- Vuoto -" else ""
                 html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black;'>{v_p}</td>"
             html_tab += "</tr>"
     html_tab += "</table></div><br/>"
@@ -158,13 +160,16 @@ with tab1:
                 r = [Paragraph(f_txt, ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=8, alignment=1))]
                 for dt in date_sett:
                     v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
-                    testo_pulito = f"{v.split(' ')[0]}<br/>{v.split(' ')[1]}" if " " in v and v != "- Vuoto -" else (v if v != "- Vuoto -" else "")
+                    testo_pulito = v if v != "- Vuoto -" else ""
+                    if " " in testo_pulito:
+                        p_n = testo_pulito.split(" ", 1)
+                        testo_pulito = f"{p_n[0]}<br/>{p_n[1]}"
                     r.append(Paragraph(testo_pulito, c_st_tab))
                 data_pdf.append(r)
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        t_table = Table(data_pdf, colWidths=[90, 95, 95, 95, 95, 95, 95, 95])
+        t_table = Table(data_pdf, colWidths=[90, 80, 80, 80, 80, 80, 80, 80])
         t_table.setStyle(TableStyle(r_styles))
         elements_tab.append(t_table)
         doc_tab.build(elements_tab)
@@ -183,15 +188,18 @@ with tab2:
                 if op in t_c:
                     t_c[op] += 1
                     if g_n_it[idx] not in g_i[op]: g_i[op].append(g_n_it[idx])
-                    
-html_rep = f"REPORT - TURNI REMS - DAL {lun_str} AL {dom_str}"
+html_rep = f"REPORT - PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {lun_str} AL {dom_str}"
 html_rep += "OPERATOREORE S.PREV.EFF.GIORNI IMPIEGATIORE TOTALI"
 for op, (ore_g, da_f) in DB_OPERATORI.items():
     reg = t_c[op]
     sg = ", ".join(g_i[op]) if g_i[op] else "-"
     if reg > 0:
-            op_p = f"{op.split(' ')[0]}{op.split(' ')[1]}" if " " in op else op
-html_rep += f"{op_p}{ore_g}{da_f}{reg}{sg}{reg*ore_g} ore"
+        if " " in op:
+            parti_op = op.split(" ", 1)
+            op_p = f"{parti_op[0]}{parti_op[1]}"
+        else:
+            op_p = op
+        html_rep += f"{op_p}{ore_g}{da_f}{reg}{sg}{reg*ore_g} ore"
 html_rep += ""
 st.markdown(html_rep, unsafe_allow_html=True)
 if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
@@ -209,13 +217,15 @@ if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_
         reg = t_c[op]
         stringa_g = ", ".join(g_i[op]) if g_i[op] else "-"
         if reg > 0:
-            op_p = f"{op.split(' ')[0]}{op.split(' ')[1]}" if " " in op else op
-            data_pdf.append([Paragraph(op_p, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)), Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep), Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))])
-    t_rep = Table(data_pdf, colWidths=[160, 55, 55, 55, 110, 85])
-    t_rep.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]), ('BOTTOMPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6)]))
+            if " " in op:
+                parti_op = op.split(" ", 1)
+                op_p = f"{parti_op[0]}{parti_op[1]}"
+            else:
+                op_p = op
+            data_pdf.append([Paragraph(op_p, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))])
+    t_rep = Table(data_pdf, colWidths=[160, 50, 50, 50, 110, 70])
+    t_rep.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),('BOTTOMPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6)]))
     elements_rep.append(t_rep)
     doc_rep.build(elements_rep)
     with open(path_rep, "rb") as file:
-        st.download_button(label="📥 Scarica il PDF del Report Ore", data=file, 
-                           file_name=f"Report_Ore_{lun_str.replace('/', '_')}.pdf", mime="application/pdf", 
-                           use_container_width=True)
+        st.download_button(label="📥 Scarica il PDF del Report Ore", data=file, file_name=f"Report_Ore_{lun_str.replace('/', '_')}.pdf", mime="application/pdf", use_container_width=True)
