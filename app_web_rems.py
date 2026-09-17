@@ -256,6 +256,6 @@ with tab2:
         elements_rep.append(t_rep)
         doc_rep.build(elements_rep)
         with open(path_rep, "rb") as file:
-st.download_button(label="📥 Scarica il PDF del Report Ore", data=file, 
+            st.download_button(label="📥 Scarica il PDF del Report Ore", data=file, 
                    file_name=f"Report_Ore_{lun_str.replace('/', '_')}.pdf", mime="application/pdf", 
                    use_container_width=True)
