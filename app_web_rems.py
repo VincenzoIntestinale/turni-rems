@@ -188,7 +188,8 @@ with tab2:
         for fas in FASCE:
             for s in range(MAX_SLOTS):
                 op = dati_turni[k_g][fas][s]
-if op in t_c:t_c[op] += 1
+if op in t_c:
+    t_c[op] += 1
 if g_n_it[idx] not in g_i[op]:
     g_i[op].append(g_n_it[idx])
     html_rep = f"REPORT - PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {lun_str} AL {dom_str}"
