@@ -38,17 +38,14 @@ with col_next:
         st.session_state.data_ancora += timedelta(days=7)
         st.rerun()
 
-date_sett = []
-for i in range(7):
-    date_sett.append(st.session_state.data_ancora + timedelta(days=i))
-
+date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
 lun_str = date_sett[0].strftime('%d/%m/%Y')
 dom_str = date_sett[-1].strftime('%d/%m/%Y')
 
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# Funzione di lettura corretta e sincronizzata al formato di salvataggio
+# LETTURA SINCRONIZZATA DAL CLOUD DEI SECRETS
 def carica_turni_settimana(date_list):
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     try:
@@ -57,9 +54,9 @@ def carica_turni_settimana(date_list):
             for dt in date_list:
                 k_g = dt.strftime("%Y-%m-%d")
                 for fas in FASCE:
-                    f_p = fas.replace(" ", "").replace(":", "_").replace("-", "_")
+                    f_pulita = fas.replace(" ", "").replace(":", "_").replace("-", "_")
                     for s in range(MAX_SLOTS):
-                        chiave_unica = f"{k_g}_{f_p}_{s}"
+                        chiave_unica = f"{k_g}_{f_pulita}_{s}"
                         if chiave_unica in archivio_cloud:
                             dati[k_g][fas][s] = str(archivio_cloud[chiave_unica])
     except Exception:
@@ -72,11 +69,11 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-# Funzione di salvataggio permanente istantaneo
+# SCRITTURA CORRETTA SENZA LISTE CORROTTE
 def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     scelta_attuale = st.session_state[chiave_widget]
-    f_p = fascia.replace(" ", "").replace(":", "_").replace("-", "_")
-    chiave_unica = f"{data_g}_{f_p}_{slot}"
+    f_pulita = fascia.replace(" ", "").replace(":", "_").replace("-", "_")
+    chiave_unica = f"{data_g}_{f_pulita}_{slot}"
     
     try:
         if scelta_attuale != "- Vuoto -":
@@ -175,7 +172,7 @@ with tab1:
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        w_cols = [95, 95, 95, 95, 95, 95, 95, 95]
+        w_cols = [100, 85, 85, 85, 85, 85, 85, 85]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
         elements_tab.append(t_table)
@@ -242,7 +239,7 @@ with tab2:
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.black))
                 ])
                 
-        w_rep = [160, 50, 50, 50, 140, 70]
+        w_rep = [160, 55, 55, 55, 110, 75]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")),
