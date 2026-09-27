@@ -133,7 +133,7 @@ with tab1:
                 v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
                 if " " in v and v != "- Vuoto -":
                     parti_nome = v.split(" ", 1)
-                    v_p = f"{parti_nome[0]}<br/>{parti_nome[1]}" if len(parti_nome) > 1 else v
+                    v_p = f"{parti_nome}<br/>{parti_nome}"
                 else:
                     v_p = v if v != "- Vuoto -" else ""
                 html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black;'>{v_p}</td>"
@@ -141,8 +141,49 @@ with tab1:
     html_tab += "</table></div><br/>"
     st.markdown(html_tab, unsafe_allow_html=True)
     
-    if st.button("🖨️ Stampa Tabellone Settimanale (A4 Orizzontale)", use_container_width=True):
-        st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
+    if st.button("🖨️ Genera PDF Tabellone Settimanale", key="gen_pdf_tab_btn", use_container_width=True):
+        from reportlab.lib.pagesizes import letter, landscape
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib import colors
+        
+        path_tab = "Tabellone_Turni_REMS.pdf"
+        doc_tab = SimpleDocTemplate(path_tab, pagesize=landscape(letter), leftMargin=20, rightMargin=20, topMargin=20, bottomMargin=20)
+        elements_tab = list()
+        styles_tab = getSampleStyleSheet()
+        t_st_tab = ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=15)
+        c_st_tab = ParagraphStyle('C', fontName='Helvetica', fontSize=8, alignment=1)
+        h_st_tab = ParagraphStyle('H', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.white)
+        
+        elements_tab.append(Paragraph(f"PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {lun_str} AL {dom_str}", t_st_tab))
+        headers_pdf = [Paragraph("Fascia Oraria", h_st_tab)]
+        for i, d in enumerate(date_sett):
+            headers_pdf.append(Paragraph(f"{g_nomi[i]} {d.strftime('%d/%m')}", h_st_tab))
+        data_pdf = [headers_pdf]
+        r_styles = [('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#DDDDDD"))]
+        
+        r_idx = 1
+        for fas in FASCE:
+            bg_c = colors.HexColor("#FFF1E0") if "09:00" in fas else colors.HexColor("#F3E5F5")
+            testo_orario = "MATTINO dalle 09:00 alle 14:00" if "09:00" in fas else "POMERIGGIO dalle 15:00 alle 20:00"
+            for s in range(MAX_SLOTS):
+                f_txt = testo_orario if s == 2 else ""
+                r = [Paragraph(f_txt, ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=7, alignment=1))]
+                for dt in date_sett:
+                    v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
+                    testo_pulito = v if v != "- Vuoto -" else ""
+                    r.append(Paragraph(testo_pulito, c_st_tab))
+                data_pdf.append(r)
+                r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
+                r_idx += 1
+                
+        w_cols = [70] + [100] * 7
+        t_table = Table(data_pdf, colWidths=w_cols)
+        t_table.setStyle(TableStyle(r_styles))
+        elements_tab.append(t_table)
+        doc_tab.build(elements_tab)
+        with open(path_tab, "rb") as file:
+            st.download_button(label="📥 Scarica il PDF del Tabellone", data=file, file_name=f"Tabellone_{lun_str.replace('/', '_')}.pdf", mime="application/pdf", use_container_width=True)
 
 with tab2:
     t_c = {n: 0 for n in DB_OPERATORI.keys()}
