@@ -23,7 +23,8 @@ if "data_ancora" not in st.session_state:
     oggi = datetime.now()
     st.session_state.data_ancora = oggi - timedelta(days=oggi.weekday())
 
-col_prev, col_testo, col_next = st.columns()
+# CORRETTO: Specificato il numero 3 per sanare il TypeError delle colonne
+col_prev, col_testo, col_next = st.columns(3)
 
 with col_prev:
     if st.button("◀ Settimana Prec.", key="nav_sf_prev", use_container_width=True):
@@ -36,13 +37,13 @@ with col_next:
         st.rerun()
 
 date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
-lun_str = date_sett.strftime('%d/%m/%Y')
+lun_str = date_sett[0].strftime('%d/%m/%Y')
 dom_str = date_sett[-1].strftime('%d/%m/%Y')
 
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# LETTURA DI SICUREZZA DAL FILE FISSO SU GITHUB
+# LETTURA SINCRONIZZATA DAL FILE FISSO
 def carica_turni_settimana(date_list):
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     if os.path.exists(FILE_DATI):
@@ -52,7 +53,7 @@ def carica_turni_settimana(date_list):
                 for k, v in archivio.items():
                     if "_" in k:
                         parti = k.split("_")
-                        g_data = parti
+                        g_data = parti[0]  # CORRETTO: Ripristinato l'indice della data
                         if g_data in dati:
                             f_orario = "09:00 - 14:00" if "09_00" in k else "15:00 - 20:00"
                             s_idx = int(parti[-1])
@@ -68,7 +69,7 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-# SCRITTURA DIRETTAMENTE DENTRO GITHUB PER EVITARE RILASCI VOLATILI
+# SCRITTURA SULL'ARCHIVIO DI TESTO PERMANENTE
 def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     scelta_attuale = st.session_state[chiave_widget]
     f_p = fascia.replace(" ", "").replace(":", "_").replace("-", "_")
@@ -94,6 +95,7 @@ def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     except Exception:
         pass
 
+# GENERAZIONE INTERFACCIA GRAFICA
 colonne_giorni = st.columns(7)
 for idx, dt in enumerate(date_sett):
     k_g = dt.strftime("%Y-%m-%d")
@@ -131,7 +133,7 @@ with tab1:
                 v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
                 if " " in v and v != "- Vuoto -":
                     parti_nome = v.split(" ", 1)
-                    v_p = f"{parti_nome}<br/>{parti_nome}"
+                    v_p = f"{parti_nome[0]}<br/>{parti_nome[1]}" if len(parti_nome) > 1 else v
                 else:
                     v_p = v if v != "- Vuoto -" else ""
                 html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black;'>{v_p}</td>"
@@ -161,7 +163,7 @@ with tab2:
         reg = t_c[op]
         sg = ", ".join(g_i[op]) if g_i[op] else "-"
         if reg > 0:
-            op_p = f"{op.split(' ', 1)}<br/>{op.split(' ', 1)}" if " " in op else op
+            op_p = f"{op.split(' ', 1)[0]}<br/>{op.split(' ', 1)[1]}" if " " in op and len(op.split(' ', 1)) > 1 else op
             html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{reg}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D; font-size:12px;'><b>{reg*ore_g} ore</b></td></tr>"
     html_rep += "</table></div><br/>"
     st.markdown(html_rep, unsafe_allow_html=True)
