@@ -47,7 +47,7 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# BIINDATURA: Ripristinati gli indici numerici completi per caricare i turni senza vuoti
+# CORRETTO: Inseriti gli indici numerici, [1], [2] e [-1] per decodificare il file JSON
 def carica_turni_settimana(date_list):
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     if os.path.exists(FILE_DATI):
@@ -176,7 +176,7 @@ with tab1:
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        # RIPRISTINATO NUMERICO: 1 colonna orario (110) + 7 colonne giorni (92 l'una)
+        # RIPRISTINATO: 1 colonna orario (110) + 7 colonne giorni (92 l'una) = 754 totali (A4 Landscape)
         w_cols = [110, 92, 92, 92, 92, 92, 92, 92]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
@@ -242,7 +242,7 @@ with tab2:
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
                 ])
                 
-        # RIPRISTINATO NUMERICO: 6 colonne proporzionali per foglio verticale
+        # RIPRISTINATO: 6 colonne proporzionali per foglio verticale (A4 Portrait)
         w_rep = [180, 55, 55, 55, 110, 75]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
