@@ -64,9 +64,12 @@ dati_turni = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FA
 for k, v in archivio_globale.items():
     if "_" in k:
         parti_chiave = k.split("_")
-        # CORRETTO: Ricostruzione esatta dell'indice data YYYY-MM-DD
         if len(parti_chiave) >= 3:
-            g_data = f"{parti_chiave[0]}-{parti_chiave[1]}-{parti_chiave[2]}"
+            # CORRETTO: Inseriti gli indici fissi 0, 1 e 2 per estrarre anno-mese-giorno dal file
+            anno_g = parti_chiave[0]
+            mese_g = parti_chiave[1]
+            giorno_g = parti_chiave[2]
+            g_data = f"{anno_g}-{mese_g}-{giorno_g}"
             if g_data in dati_turni:
                 f_orario = "09:00 - 14:00" if "mattino" in k else "15:00 - 20:00"
                 try:
@@ -130,7 +133,11 @@ with tab1:
             html_tab += f"<tr style='background-color:{bg}; text-align:center;'><td style='padding:6px; border:1px solid #ddd; font-size:11px;'>{f_txt}</td>"
             for dt in date_sett:
                 v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
-                v_p = f"{v.split(' ', 1)[0]}<br/>{v.split(' ', 1)[1]}" if " " in v and v != "- Vuoto -" else (v if v != "- Vuoto -" else "")
+                if " " in v and v != "- Vuoto -":
+                    parti_nome = v.split(" ", 1)
+                    v_p = f"{parti_nome[0]}<br/>{parti_nome[1]}" if len(parti_nome) > 1 else v
+                else:
+                    v_p = v if v != "- Vuoto -" else ""
                 html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black;'>{v_p}</td>"
             html_tab += "</tr>"
     html_tab += "</tbody></table></div><br/>"
@@ -159,7 +166,11 @@ with tab2:
         reg = t_c[op]
         sg = ", ".join(g_i[op]) if g_i[op] else "-"
         if reg > 0:
-            op_p = f"{op.split(' ', 1)[0]}<br/>{op.split(' ', 1)[1]}" if " " in op else op
+            if " " in op:
+                parti_op = op.split(" ", 1)
+                op_p = f"{parti_op[0]}<br/>{parti_op[1]}" if len(parti_op) > 1 else op
+            else:
+                op_p = op
             html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc;'>{reg}</td><td style='padding:8px; border:1px solid #ccc;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D;'><b>{reg*ore_g} ore</b></td></tr>"
     html_rep += "</table></div><br/>"
     st.markdown(html_rep, unsafe_allow_html=True)
