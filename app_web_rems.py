@@ -47,6 +47,7 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
+# BIINDATURA: Ripristinati gli indici numerici completi per caricare i turni senza vuoti
 def carica_turni_settimana(date_list):
     dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
     if os.path.exists(FILE_DATI):
@@ -113,7 +114,6 @@ for idx, dt in enumerate(date_sett):
                     label=f"h_{ch_widget}", options=lista_ops, index=def_idx, key=ch_widget,
                     label_visibility="collapsed", on_change=salva_turno_callback, args=(ch_widget, k_g, fas, s)
                 )
-
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
@@ -176,7 +176,7 @@ with tab1:
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        # RIPRISTINATO COMPLETO: 1 colonna orario (110px) + 7 colonne giorni (92px l'una) = 754px totali
+        # RIPRISTINATO NUMERICO: 1 colonna orario (110) + 7 colonne giorni (92 l'una)
         w_cols = [110, 92, 92, 92, 92, 92, 92, 92]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
@@ -189,8 +189,6 @@ with tab2:
     t_c = {n: 0 for n in DB_OPERATORI.keys()}
     g_i = {n: list() for n in DB_OPERATORI.keys()}
     g_n_it = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
-    for idx, dt in enumerate(date_sett):
-        k_g = dt.strftime("%Y-%m-%d")
     for idx, dt in enumerate(date_sett):
         k_g = dt.strftime("%Y-%m-%d")
         for fas in FASCE:
@@ -212,16 +210,11 @@ with tab2:
                 op_p = f"{parti_op[0]}<br/>{parti_op[1]}" if len(parti_op) > 1 else op
             else:
                 op_p = op
-            html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc;'>{reg}</td><td style='padding:8px; border:1px solid #ccc;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D;'><b>{reg*ore_g} ore</b></td></tr>"
+            html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{reg}</td><td style='padding:8px; border:1px solid #ccc; color:black;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D; font-size:12px;'><b>{reg*ore_g} ore</b></td></tr>"
     html_rep += "</table></div><br/>"
     st.markdown(html_rep, unsafe_allow_html=True)
     
     if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
-        from reportlab.lib.pagesizes import letter
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib import colors
-        
         path_rep = "Report_Ore_REMS.pdf"
         doc_rep = SimpleDocTemplate(path_rep, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
         elements_rep = list()
@@ -248,15 +241,14 @@ with tab2:
                     Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
                 ])
+                
+        # RIPRISTINATO NUMERICO: 6 colonne proporzionali per foglio verticale
         w_rep = [180, 55, 55, 55, 110, 75]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), 
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), 
-            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 6), 
-            ('TOPPADDING', (0,0), (-1,-1), 6)
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6)
         ]))
         elements_rep.append(t_rep)
         doc_rep.build(elements_rep)
