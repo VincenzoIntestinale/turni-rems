@@ -42,7 +42,6 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# FUNZIONI DI LETTURA E SCRITTURA SU CLOUD STORAGE INTEGRATO (IMMUNE AI RESET)
 def scarica_archivio_cloud():
     try:
         if os.path.exists(NOME_FILE_CLOUD):
@@ -65,15 +64,17 @@ dati_turni = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FA
 for k, v in archivio_globale.items():
     if "_" in k:
         parti_chiave = k.split("_")
-        g_data = parti_chiave[0]
-        if g_data in dati_turni:
-            f_orario = "09:00 - 14:00" if "mattino" in k else "15:00 - 20:00"
-            try:
-                s_idx = int(parti_chiave[-1])
-                if s_idx < MAX_SLOTS:
-                    dati_turni[g_data][f_orario][s_idx] = v
-            except Exception:
-                pass
+        # CORRETTO: Ricostruzione esatta dell'indice data YYYY-MM-DD
+        if len(parti_chiave) >= 3:
+            g_data = f"{parti_chiave[0]}-{parti_chiave[1]}-{parti_chiave[2]}"
+            if g_data in dati_turni:
+                f_orario = "09:00 - 14:00" if "mattino" in k else "15:00 - 20:00"
+                try:
+                    s_idx = int(parti_chiave[-1])
+                    if s_idx < MAX_SLOTS:
+                        dati_turni[g_data][f_orario][s_idx] = v
+                except Exception:
+                    pass
 
 lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
 g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
