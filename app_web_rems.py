@@ -194,7 +194,7 @@ with tab2:
         k_g = dt.strftime("%Y-%m-%d")
         for fas in FASCE:
             for s in range(MAX_SLOTS):
-op = dati_turni[k_g][fas][s]
+                op = dati_turni[k_g][fas][s]
 if op in t_c:t_c[op] += 1
 if g_n_it[idx] not in g_i[op]:
     g_i[op].append(g_n_it[idx])
