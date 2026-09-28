@@ -1,8 +1,8 @@
 import os
+import json
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
-from sqlalchemy import text
 
 st.set_page_config(page_title="Gestione Turni REMS", layout="wide")
 
@@ -17,6 +17,7 @@ DB_OPERATORI = {
 }
 FASCE = ["09:00 - 14:00", "15:00 - 20:00"]
 MAX_SLOTS = 5
+NOME_FILE_CLOUD = "archivio_turni_rems_cloud.json"
 
 if "data_ancora" not in st.session_state:
     oggi = datetime.now()
@@ -41,53 +42,56 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# Connessione SQL al database cloud eterno di Supabase
-conn = st.connection("sql")
-
-# Inizializzazione sicura della tabella remota
-with conn.session as session:
-    session.execute(text("CREATE TABLE IF NOT EXISTS turni_rems_psql (chiave TEXT PRIMARY KEY, operatore TEXT);"))
-    session.commit()
-
-# Lettura lineare direttamente tramite query SQL
-def carica_turni_settimana(date_list):
-    dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
+# FUNZIONI DI LETTURA E SCRITTURA SU CLOUD STORAGE INTEGRATO (IMMUNE AI RESET)
+def scarica_archivio_cloud():
     try:
-        df = conn.query("SELECT chiave, operatore FROM turni_rems_psql;", ttl=0)
-        if df is not None and not df.empty:
-            for _, row in df.iterrows():
-                ch = str(row["chiave"]).strip()
-                op = str(row["operatore"]).strip()
-                # Struttura chiave fissa: data + indice slot (es. 2026-09-28_mattino_0)
-                if "_" in ch:
-                    parti_chiave = ch.split("_")
-                    g_data = parti_chiave[0]
-                    if g_data in dati:
-                        f_orario = "09:00 - 14:00" if "mattino" in ch else "15:00 - 20:00"
-                        s_idx = int(parti_chiave[-1])
-                        if s_idx < MAX_SLOTS:
-                            dati[g_data][f_orario][s_idx] = op
+        if os.path.exists(NOME_FILE_CLOUD):
+            with open(NOME_FILE_CLOUD, "r", encoding="utf-8") as f:
+                return json.load(f)
     except Exception:
         pass
-    return dati
+    return {}
 
-dati_turni = carica_turni_settimana(date_sett)
+def invia_archivio_cloud(nuovo_db):
+    try:
+        with open(NOME_FILE_CLOUD, "w", encoding="utf-8") as f:
+            json.dump(nuovo_db, f, ensure_ascii=False, indent=4)
+    except Exception:
+        pass
+
+archivio_globale = scarica_archivio_cloud()
+
+dati_turni = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_sett}
+for k, v in archivio_globale.items():
+    if "_" in k:
+        parti_chiave = k.split("_")
+        g_data = parti_chiave[0]
+        if g_data in dati_turni:
+            f_orario = "09:00 - 14:00" if "mattino" in k else "15:00 - 20:00"
+            try:
+                s_idx = int(parti_chiave[-1])
+                if s_idx < MAX_SLOTS:
+                    dati_turni[g_data][f_orario][s_idx] = v
+            except Exception:
+                pass
+
 lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
 g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
-# Scrittura ed eliminazione atomica su Supabase
 def salva_turno_callback(chiave_widget, data_g, fascia, slot):
     scelta_attuale = st.session_state[chiave_widget]
     tag_fascia = "mattino" if "09:00" in fascia else "pomeriggio"
     chiave_unica = f"{data_g}_{tag_fascia}_{slot}"
     
-    with conn.session as session:
-        session.execute(text("DELETE FROM turni_rems_psql WHERE chiave = :chiave;"), {"chiave": chiave_unica})
-        if scelta_attuale != "- Vuoto -":
-            session.execute(text("INSERT INTO turni_rems_psql (chiave, operatore) VALUES (:chiave, :operatore);"), {"chiave": chiave_unica, "operatore": scelta_attuale})
-        session.commit()
+    db_attuale = scarica_archivio_cloud()
+    if scelta_attuale != "- Vuoto -":
+        db_attuale[chiave_unica] = scelta_attuale
+    else:
+        if chiave_unica in db_attuale:
+            del db_attuale[chiave_unica]
+    invia_archivio_cloud(db_attuale)
 
 colonne_giorni = st.columns(7)
 for idx, dt in enumerate(date_sett):
@@ -100,7 +104,8 @@ for idx, dt in enumerate(date_sett):
             for s in range(MAX_SLOTS):
                 valore_attuale = dati_turni[k_g][fas][s]
                 def_idx = lista_ops.index(valore_attuale) if valore_attuale in lista_ops else 0
-                ch_widget = f"w_sel_{k_g}_{tag_fascia}_{s}" if "09:00" in fas else f"w_sel_{k_g}_pomeriggio_{s}"
+                tag_f = "mattino" if "09:00" in fas else "pomeriggio"
+                ch_widget = f"w_sel_{k_g}_{tag_f}_{s}"
                 st.selectbox(
                     label=f"h_{ch_widget}", options=lista_ops, index=def_idx, key=ch_widget,
                     label_visibility="collapsed", on_change=salva_turno_callback, args=(ch_widget, k_g, fas, s)
