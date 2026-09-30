@@ -169,7 +169,7 @@ st.markdown("""
 if len(testo_pulito.split(" ", 1)) > 1:
                         p_n = testo_pulito.split(" ", 1)
                         testo_pulito = f"{p_n[0]}<br/>{p_n[1]}"
-                    r.append(Paragraph(testo_pulito, c_st_tab))
+r.append(Paragraph(testo_pulito, c_st_tab))
 data_pdf.append(r)
 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
 r_idx += 1
