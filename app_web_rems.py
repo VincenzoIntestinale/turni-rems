@@ -47,6 +47,7 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
+# BIINDATURA: Configurato l'URL ufficiale per le API di comunicazione con il server di GitHub
 def scarica_archivio_github():
     if not TOKEN_GITHUB:
         if os.path.exists(FILE_DATI):
@@ -109,7 +110,7 @@ for k, v in archivio_globale.items():
     if "_" in k:
         parti = k.split("_")
         if len(parti) >= 3:
-            g_data = parti[0]
+            g_data = f"{parti[0]}-{parti[1]}-{parti[2]}"
             if g_data in dati_turni:
                 f_orario = "09:00 - 14:00" if "mattino" in k else "15:00 - 20:00"
                 try:
@@ -188,9 +189,9 @@ with tab2:
             op_p = f"{op.split(' ', 1)[0]}<br/>{op.split(' ', 1)[1]}" if (" " in op and len(op.split(' ', 1)) > 1) else op
             html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc;'>{reg}</td><td style='padding:8px; border:1px solid #ccc;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D;'><b>{reg*ore_g} ore</b></td></tr>"
     html_rep += "</table></div><br/>"
-    st.markdown(html_rep, unsafe_allow_html=True)
-    if st.button("📊 Stampa Report Ore (A4 Verticale)", use_container_width=True):
-        st.markdown("window.print();", unsafe_allow_html=True)
+st.markdown(html_rep, unsafe_allow_html=True)
+if st.button("📊 Stampa Report Ore (A4 Verticale)", use_container_width=True):
+st.markdown("window.print();", unsafe_allow_html=True)
 st.markdown("""
 
 @media print {
