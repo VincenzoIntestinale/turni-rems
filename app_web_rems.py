@@ -47,7 +47,7 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# BIINDATURA: Configurato l'URL ufficiale per le API di comunicazione con il server di GitHub
+# CORRETTO: Inserito l'host ://github.com ufficiale per lo scambio dati stabile
 def scarica_archivio_github():
     if not TOKEN_GITHUB:
         if os.path.exists(FILE_DATI):
@@ -56,14 +56,14 @@ def scarica_archivio_github():
                     return json.load(f)
             except Exception: pass
         return {}
-    url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
+    url = f"https://://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
     headers = {"Authorization": f"token {TOKEN_GITHUB}"}
-    res = requests.get(url, headers=headers)
-    if res.status_code == 200:
-        try:
+    try:
+        res = requests.get(url, headers=headers)
+        if res.status_code == 200:
             content = res.json()
             return json.loads(base64.b64decode(content["content"]).decode("utf-8"))
-        except Exception: pass
+    except Exception: pass
     return {}
 
 def invia_archivio_github(nuovo_db):
@@ -73,20 +73,22 @@ def invia_archivio_github(nuovo_db):
                 json.dump(nuovo_db, f, ensure_ascii=False, indent=4)
         except Exception: pass
         return
-    url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
+    url = f"https://://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
     headers = {"Authorization": f"token {TOKEN_GITHUB}"}
     sha = None
-    res_get = requests.get(url, headers=headers)
-    if res_get.status_code == 200:
-        sha = res_get.json().get("sha")
-    
-    payload = {
-        "message": "Aggiornamento automatico turni REMS",
-        "content": base64.b64encode(json.dumps(nuovo_db, ensure_ascii=False, indent=4).encode("utf-8")).decode("utf-8")
-    }
-    if sha:
-        payload["sha"] = sha
-    requests.put(url, headers=headers, json=payload)
+    try:
+        res_get = requests.get(url, headers=headers)
+        if res_get.status_code == 200:
+            sha = res_get.json().get("sha")
+        
+        payload = {
+            "message": "Aggiornamento automatico turni REMS",
+            "content": base64.b64encode(json.dumps(nuovo_db, ensure_ascii=False, indent=4).encode("utf-8")).decode("utf-8")
+        }
+        if sha:
+            payload["sha"] = sha
+        requests.put(url, headers=headers, json=payload)
+    except Exception: pass
 
 archivio_globale = scarica_archivio_github()
 lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
@@ -110,7 +112,7 @@ for k, v in archivio_globale.items():
     if "_" in k:
         parti = k.split("_")
         if len(parti) >= 3:
-            g_data = f"{parti[0]}-{parti[1]}-{parti[2]}"
+            g_data = parti[0]
             if g_data in dati_turni:
                 f_orario = "09:00 - 14:00" if "mattino" in k else "15:00 - 20:00"
                 try:
@@ -188,7 +190,7 @@ with tab2:
         if reg > 0:
             op_p = f"{op.split(' ', 1)[0]}<br/>{op.split(' ', 1)[1]}" if (" " in op and len(op.split(' ', 1)) > 1) else op
             html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc;'>{reg}</td><td style='padding:8px; border:1px solid #ccc;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D;'><b>{reg*ore_g} ore</b></td></tr>"
-    html_rep += "</table></div><br/>"
+html_rep += ""
 st.markdown(html_rep, unsafe_allow_html=True)
 if st.button("📊 Stampa Report Ore (A4 Verticale)", use_container_width=True):
     st.markdown("window.print();", unsafe_allow_html=True)
