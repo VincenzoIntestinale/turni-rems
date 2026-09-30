@@ -191,7 +191,7 @@ with tab2:
     html_rep += "</table></div><br/>"
 st.markdown(html_rep, unsafe_allow_html=True)
 if st.button("📊 Stampa Report Ore (A4 Verticale)", use_container_width=True):
-st.markdown("window.print();", unsafe_allow_html=True)
+    st.markdown("window.print();", unsafe_allow_html=True)
 st.markdown("""
 
 @media print {
