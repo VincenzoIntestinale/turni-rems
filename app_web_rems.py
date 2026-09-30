@@ -3,7 +3,11 @@ import json
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
-from sqlalchemy import text
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 st.set_page_config(page_title="Gestione Turni REMS", layout="wide")
 
@@ -18,6 +22,7 @@ DB_OPERATORI = {
 }
 FASCE = ["09:00 - 14:00", "15:00 - 20:00"]
 MAX_SLOTS = 5
+FILE_DATI = "archivio_turni_rems_cloud.json"
 
 if "data_ancora" not in st.session_state:
     oggi = datetime.now()
@@ -42,35 +47,15 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# Connessione nativa SQL di Streamlit (Cassaforte Cloud)
-conn = st.connection("sql")
+def carica_turni_settimana():
+    if os.path.exists(FILE_DATI):
+        try:
+            with open(FILE_DATI, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception: pass
+    return {}
 
-with conn.session as session:
-    session.execute(text("CREATE TABLE IF NOT EXISTS turni_rems_cloud (chiave TEXT PRIMARY KEY, operatore TEXT);"))
-    session.commit()
-
-def carica_turni_settimana(date_list):
-    dati = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_list}
-    try:
-        df = conn.query("SELECT chiave, operatore FROM turni_rems_cloud;", ttl=0)
-        if df is not None and not df.empty:
-            for _, row in df.iterrows():
-                ch = str(row["chiave"]).strip()
-                op = str(row["operatore"]).strip()
-                if "_" in ch:
-                    parti = ch.split("_")
-                    g_data = parti[0]
-                    if g_data in dati:
-                        f_orario = "09:00 - 14:00" if "mattino" in ch else "15:00 - 20:00"
-                        try:
-                            s_idx = int(parti[-1])
-                            if s_idx < MAX_SLOTS:
-                                dati[g_data][f_orario][s_idx] = op
-                        except Exception: pass
-    except Exception: pass
-    return dati
-
-dati_turni = carica_turni_settimana(date_sett)
+archivio_globale = carica_turni_settimana()
 lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
 g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 
@@ -80,11 +65,15 @@ def salva_turno_callback(ch_w, dt_g, fas, sl):
     scelta = st.session_state[ch_w]
     tag_f = "mattino" if "09:00" in fas else "pomeriggio"
     chiave_unica = f"{dt_g}_{tag_f}_{sl}"
-    with conn.session as session:
-        session.execute(text("DELETE FROM turni_rems_cloud WHERE chiave = :chiave;"), {"chiave": chiave_unica})
-        if scelta != "- Vuoto -":
-            session.execute(text("INSERT INTO turni_rems_cloud (chiave, operatore) VALUES (:chiave, :operatore);"), {"chiave": chiave_unica, "operatore": scelta})
-        session.commit()
+    db = carica_turni_settimana()
+    if scelta != "- Vuoto -":
+        db[chiave_unica] = scelta
+    else:
+        if chiave_unica in db: del db[chiave_unica]
+    try:
+        with open(FILE_DATI, "w", encoding="utf-8") as f:
+            json.dump(db, f, ensure_ascii=False, indent=4)
+    except Exception: pass
 
 colonne_giorni = st.columns(7)
 for idx, dt in enumerate(date_sett):
@@ -96,7 +85,8 @@ for idx, dt in enumerate(date_sett):
             st.markdown(f"<div style='background-color:{bg_c}; padding:4px; margin-top:8px; border-radius:4px; text-align:center; font-size:11px; font-weight:bold; color:#333; font-family:Arial;'>🕒 {fas}</div>", unsafe_allow_html=True)
             for s in range(MAX_SLOTS):
                 tag_f = "mattino" if "09:00" in fas else "pomeriggio"
-                valore_attuale = dati_turni[k_g][fas][s]
+                ch_u = f"{k_g}_{tag_f}_{s}"
+                valore_attuale = archivio_globale.get(ch_u, "- Vuoto -")
                 def_idx = lista_ops.index(valore_attuale) if valore_attuale in lista_ops else 0
                 ch_widget = f"w_sel_{k_g}_{tag_f}_{s}"
                 st.selectbox(
@@ -122,64 +112,55 @@ with tab1:
             for dt in date_sett:
                 tag_f = "mattino" if "09:00" in fas else "pomeriggio"
                 ch_u = f"{dt.strftime('%Y-%m-%d')}_{tag_f}_{s}"
-                v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
-                v_p = f"{v.split(' ', 1)}<br/>{v.split(' ', 1)}" if (" " in v and v != "- Vuoto -" and len(v.split(' ', 1)) > 1) else (v if v != "- Vuoto -" else "")
-                html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black; font-weight:bold;'>{v_p}</td>"
+                v = archivio_globale.get(ch_u, "- Vuoto -")
+                v_p = f"{v.split(' ', 1)[0]}<br/>{v.split(' ', 1)[1]}" if (" " in v and v != "- Vuoto -" and len(v.split(' ', 1)) > 1) else (v if v != "- Vuoto -" else "")
+                html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black;'>{v_p}</td>"
             html_tab += "</tr>"
     html_tab += "</tbody></table></div><br/>"
     st.markdown(html_tab, unsafe_allow_html=True)
-    if st.button("🖨️ Stampa Tabellone Settimanale (A4 Orizzontale)", use_container_width=True):
-        st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
-
-with tab2:
-    t_c = {n: 0 for n in DB_OPERATORI.keys()}
-    g_i = {n: list() for n in DB_OPERATORI.keys()}
-    g_n_it = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
-    for idx, dt in enumerate(date_sett):
-        k_g = dt.strftime("%Y-%m-%d")
+    
+    if st.button("🖨️ Genera PDF Tabellone Settimanale", key="gen_pdf_tab_btn", use_container_width=True):
+        path_tab = "Tabellone_Turni_REMS.pdf"
+        doc_tab = SimpleDocTemplate(path_tab, pagesize=landscape(letter), leftMargin=20, rightMargin=20, topMargin=20, bottomMargin=20)
+        elements_tab = list()
+        styles_tab = getSampleStyleSheet()
+        t_st_tab = ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=15)
+        c_st_tab = ParagraphStyle('C', fontName='Helvetica', fontSize=8, alignment=1)
+        h_st_tab = ParagraphStyle('H', fontName='Helvetica-Bold', fontSize=9, alignment=1, textColor=colors.white)
+        
+        elements_tab.append(Paragraph(f"PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {lun_str} AL {dom_str}", t_st_tab))
+        headers_pdf = [Paragraph("Fascia Oraria", h_st_tab)]
+        for i, d in enumerate(date_sett):
+            headers_pdf.append(Paragraph(f"{g_nomi[i]} {d.strftime('%d/%m')}", h_st_tab))
+        data_pdf = [headers_pdf]
+        r_styles = [('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#DDDDDD"))]
+        
+        r_idx = 1
         for fas in FASCE:
+            bg_c = colors.HexColor("#FFF1E0") if "09:00" in fas else colors.HexColor("#F3E5F5")
+            testo_orario = "MATTINO<br/>dalle 09:00 alle 14:00" if "09:00" in fas else "POMERIGGIO<br/>dalle 15:00 alle 20:00"
             for s in range(MAX_SLOTS):
-                op = dati_turni[k_g][fas][s]
-                if op in t_c:
-                    t_c[op] += 1
-                    if g_n_it[idx] not in g_i[op]: g_i[op].append(g_n_it[idx])
-                    
-    html_rep = f"<div id='sez_stampa_rep'><h2 style='text-align:center; font-family:Arial; color:#1F538D;'>REPORT - TURNI REMS - DAL {lun_str} AL {dom_str}</h2>"
-    html_rep += "<table style='width:100%; border-collapse:collapse; font-family:Arial; border:1px solid #ccc;'><tr style='background-color:#1F538D; color:white;'><th style='padding:10px;'>OPERATORE</th><th style='padding:10px;'>ORE S.</th><th style='padding:10px;'>PREV.</th><th style='padding:10px;'>EFF.</th><th style='padding:10px;'>GIORNI IMPIEGATI</th><th style='padding:10px;'>ORE TOTALI</th></tr>"
-    for op, (ore_g, da_f) in DB_OPERATORI.items():
-        reg = t_c[op]
-        sg = ", ".join(g_i[op]) if g_i[op] else "-"
-        if reg > 0:
-            op_p = f"{op.split(' ', 1)}<br/>{op.split(' ', 1)}" if (" " in op and len(op.split(' ', 1)) > 1) else op
-            html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc;'>{reg}</td><td style='padding:8px; border:1px solid #ccc;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D;'><b>{reg*ore_g} ore</b></td></tr>"
-    html_rep += "</table></div><br/>"
-    st.markdown(html_rep, unsafe_allow_html=True)
-    if st.button("📊 Stampa Report Ore (A4 Verticale)", use_container_width=True):
-        st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
-
-st.markdown("""
-<style>
-@media print {
-    [data-testid="stSidebar"], [data-testid="stHeader"], .stActionButton, .stSelectbox, div.element-container, div.stBlock, button { display: none !important; }
-    iframe, hr { display: none !important; }
-    body { background: white; color: black; }
-}
-</style>
-""", unsafe_allow_html=True)
-if len(testo_pulito.split(" ", 1)) > 1:
+                f_txt = testo_orario if s == 2 else ""
+                r = [Paragraph(f_txt, ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=7, alignment=1))]
+                for dt in date_sett:
+                    tag_f = "mattino" if "09:00" in fas else "pomeriggio"
+                    ch_u = f"{dt.strftime('%Y-%m-%d')}_{tag_f}_{s}"
+                    v = archivio_globale.get(ch_u, "- Vuoto -")
+                    testo_pulito = v if v != "- Vuoto -" else ""
+                    if " " in testo_pulito and len(testo_pulito.split(" ", 1)) > 1:
                         p_n = testo_pulito.split(" ", 1)
                         testo_pulito = f"{p_n[0]}<br/>{p_n[1]}"
-r.append(Paragraph(testo_pulito, c_st_tab))
-data_pdf.append(r)
-r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
-r_idx += 1
+                    r.append(Paragraph(testo_pulito, c_st_tab))
+                data_pdf.append(r)
+                r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
+                r_idx += 1
                 
-w_cols = [110, 92, 92, 92, 92, 92, 92, 92]
-t_table = Table(data_pdf, colWidths=w_cols)
-t_table.setStyle(TableStyle(r_styles))
-elements_tab.append(t_table)
-doc_tab.build(elements_tab)
-with open(path_tab, "rb") as file:
+        w_cols = [110, 92, 92, 92, 92, 92, 92, 92]
+        t_table = Table(data_pdf, colWidths=w_cols)
+        t_table.setStyle(TableStyle(r_styles))
+        elements_tab.append(t_table)
+        doc_tab.build(elements_tab)
+        with open(path_tab, "rb") as file:
             st.download_button(label="📥 Scarica il PDF del Tabellone", data=file, file_name=f"Tabellone_{lun_str.replace('/', '_')}.pdf", mime="application/pdf", use_container_width=True)
 
 with tab2:
@@ -231,7 +212,7 @@ with tab2:
                     Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
                 ])
-        w_rep = [160, 50, 50, 50, 130, 70]
+        w_rep = [150, 60, 60, 60, 120, 70]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
