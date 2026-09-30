@@ -166,20 +166,20 @@ st.markdown("""
 }
 </style>
 """, unsafe_allow_html=True)
-                    if len(testo_pulito.split(" ", 1)) > 1:
+if len(testo_pulito.split(" ", 1)) > 1:
                         p_n = testo_pulito.split(" ", 1)
                         testo_pulito = f"{p_n[0]}<br/>{p_n[1]}"
                     r.append(Paragraph(testo_pulito, c_st_tab))
-                data_pdf.append(r)
-                r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
-                r_idx += 1
+data_pdf.append(r)
+r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
+r_idx += 1
                 
-        w_cols = [110, 92, 92, 92, 92, 92, 92, 92]
-        t_table = Table(data_pdf, colWidths=w_cols)
-        t_table.setStyle(TableStyle(r_styles))
-        elements_tab.append(t_table)
-        doc_tab.build(elements_tab)
-        with open(path_tab, "rb") as file:
+w_cols = [110, 92, 92, 92, 92, 92, 92, 92]
+t_table = Table(data_pdf, colWidths=w_cols)
+t_table.setStyle(TableStyle(r_styles))
+elements_tab.append(t_table)
+doc_tab.build(elements_tab)
+with open(path_tab, "rb") as file:
             st.download_button(label="📥 Scarica il PDF del Tabellone", data=file, file_name=f"Tabellone_{lun_str.replace('/', '_')}.pdf", mime="application/pdf", use_container_width=True)
 
 with tab2:
