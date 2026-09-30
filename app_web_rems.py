@@ -109,7 +109,7 @@ for k, v in archivio_globale.items():
     if "_" in k:
         parti = k.split("_")
         if len(parti) >= 3:
-            g_data = f"{parti[0]}-{parti[1]}-{parti[2]}"
+            g_data = parti[0]
             if g_data in dati_turni:
                 f_orario = "09:00 - 14:00" if "mattino" in k else "15:00 - 20:00"
                 try:
@@ -156,7 +156,7 @@ with tab1:
                 tag_f = "mattino" if "09:00" in fas else "pomeriggio"
                 ch_u = f"{dt.strftime('%Y-%m-%d')}_{tag_f}_{s}"
                 v = archivio_globale.get(ch_u, "- Vuoto -")
-                v_p = f"{v.split(' ', 1)}<br/>{v.split(' ', 1)}" if (" " in v and v != "- Vuoto -" and len(v.split(' ', 1)) > 1) else (v if v != "- Vuoto -" else "")
+                v_p = f"{v.split(' ', 1)[0]}<br/>{v.split(' ', 1)[1]}" if (" " in v and v != "- Vuoto -" and len(v.split(' ', 1)) > 1) else (v if v != "- Vuoto -" else "")
                 html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black; font-weight:bold;'>{v_p}</td>"
             html_tab += "</tr>"
     html_tab += "</tbody></table></div><br/>"
@@ -185,19 +185,18 @@ with tab2:
         reg = t_c[op]
         sg = ", ".join(g_i[op]) if g_i[op] else "-"
         if reg > 0:
-            op_p = f"{op.split(' ', 1)}<br/>{op.split(' ', 1)}" if (" " in op and len(op.split(' ', 1)) > 1) else op
+            op_p = f"{op.split(' ', 1)[0]}<br/>{op.split(' ', 1)[1]}" if (" " in op and len(op.split(' ', 1)) > 1) else op
             html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc;'>{reg}</td><td style='padding:8px; border:1px solid #ccc;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D;'><b>{reg*ore_g} ore</b></td></tr>"
     html_rep += "</table></div><br/>"
     st.markdown(html_rep, unsafe_allow_html=True)
     if st.button("📊 Stampa Report Ore (A4 Verticale)", use_container_width=True):
-        st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
-
+        st.markdown("window.print();", unsafe_allow_html=True)
 st.markdown("""
-<style>
+
 @media print {
-    [data-testid="stSidebar"], [data-testid="stHeader"], .stActionButton, .stSelectbox, div.element-container, div.stBlock, button { display: none !important; }
-    iframe, hr { display: none !important; }
-    body { background: white; color: black; }
+[data-testid="stSidebar"], [data-testid="stHeader"], .stActionButton, .stSelectbox, div.element-container, div.stBlock, button { display: none !important; }
+iframe, hr { display: none !important; }
+body { background: white; color: black; }
 }
-</style>
+
 """, unsafe_allow_html=True)
