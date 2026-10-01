@@ -49,14 +49,10 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-TOKEN_GITHUB = st.secrets.get("chiave_github", "").strip()
+TOKEN_GITHUB = st.secrets.get("chiave_github", "")
 REPO_GITHUB = "vincenzointestinale/turni-rems"
 
-# Avviso diagnostico visibile solo a te per testare la cassaforte dei Secrets
-if not TOKEN_GITHUB:
-    st.error("⚠️ ATTENZIONE: Il Token 'chiave_github' non è letto nei Secrets. L'app salverà solo in temporaneo.")
-
-def scarica_archivio_github():
+def carica_turni_settimana():
     if not TOKEN_GITHUB:
         if os.path.exists(FILE_DATI):
             try:
@@ -74,7 +70,7 @@ def scarica_archivio_github():
     except Exception: pass
     return {}
 
-archivio_globale = scarica_archivio_github()
+archivio_globale = carica_turni_settimana()
 lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
 g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 
@@ -101,14 +97,13 @@ def invia_archivio_github(nuovo_db):
         if sha:
             payload["sha"] = sha
         requests.put(url, headers=headers, json=payload)
-    except Exception as e:
-        st.error(f"⚠️ Eccezione invio: {str(e)}")
+    except Exception: pass
 
 def salva_turno_callback(ch_w, dt_g, fas, sl):
     scelta = st.session_state[ch_w]
     tag_f = "mattino" if "09:00" in fas else "pomeriggio"
     chiave_unica = f"{dt_g}_{tag_f}_{sl}"
-    db = scarica_archivio_github()
+    db = carica_turni_settimana()
     if scelta != "- Vuoto -":
         db[chiave_unica] = scelta
     else:
@@ -120,7 +115,6 @@ for k, v in archivio_globale.items():
     if "_" in k:
         parti = k.split("_")
         if len(parti) >= 3:
-            # CORRETTO: Ricostruzione esatta con indici numerici bloccati tra parentesi quadre
             g_data = f"{parti[0]}-{parti[1]}-{parti[2]}"
             if g_data in dati_turni:
                 f_orario = "09:00 - 14:00" if "mattino" in k else "15:00 - 20:00"
@@ -236,11 +230,12 @@ with tab2:
         sg = ", ".join(g_i[op]) if g_i[op] else "-"
         if reg > 0:
             op_p = f"{op.split(' ', 1)[0]}<br/>{op.split(' ', 1)[1]}" if (" " in op and len(op.split(' ', 1)) > 1) else op
-html_rep += f"{op_p}{ore_g}{da_f}{reg}{sg}{reg*ore_g} ore"
-html_rep += ""
-st.markdown(html_rep, unsafe_allow_html=True)
-if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
-            path_rep = "Report_Ore_REMS.pdf"
+            html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc;'>{reg}</td><td style='padding:8px; border:1px solid #ccc;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D;'><b>{reg*ore_g} ore</b></td></tr>"
+    html_rep += "</table></div><br/>"
+    st.markdown(html_rep, unsafe_allow_html=True)
+    
+    if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
+        path_rep = "Report_Ore_REMS.pdf"
 doc_rep = SimpleDocTemplate(path_rep, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
 elements_rep = list()
 styles_rep = getSampleStyleSheet()
@@ -263,12 +258,9 @@ Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphSt
 w_rep = [140, 50, 50, 50, 150, 60]
 t_rep = Table(data_pdf, colWidths=w_rep)
 t_rep.setStyle(TableStyle([
-('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")),
-('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
-('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),
-('BOTTOMPADDING', (0,0), (-1,-1), 6),
-('TOPPADDING', (0,0), (-1,-1), 6)
+('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
+('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),
+('BOTTOMPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6)
 ]))
 elements_rep.append(t_rep)
 doc_rep.build(elements_rep)
