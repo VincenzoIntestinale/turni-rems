@@ -2,11 +2,55 @@ import os
 import json
 import base64
 import requests
-import base64
-import requests
+import pandas as pd
+import streamlit as st
+from datetime import datetime, timedelta
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+st.set_page_config(page_title="Gestione Turni REMS", layout="wide")
+
+DB_OPERATORI = {
+    "ALFONSO SANTANGELO": (5, 6), "ANTONELLA DI BAIA": (5, 5), 
+    "ANTONIO LUBRANO": (5, 6), "DOMENICA VISCONTE": (3, 6), 
+    "GENOVEFFA CAPUANO": (5, 3), "GIULIA ZITIELLO": (5, 5), 
+    "MICHELA AIELLO": (5, 5), "MICHELE CARUSONE": (5, 5), 
+    "NELLO ROMANUCCI": (5, 5), "PAOLA DE PASCALE": (5, 3), 
+    "VALENTINA PEREZ": (5, 1), "VALENTINA ROCCO": (3, 3), 
+    "VINCENZO INTESTINALE": (3, 3)
+}
+FASCE = ["09:00 - 14:00", "15:00 - 20:00"]
+MAX_SLOTS = 5
+FILE_DATI = "archivio_turni_rems_cloud.json"
 
 TOKEN_GITHUB = st.secrets.get("chiave_github", "").strip()
 REPO_GITHUB = "vincenzointestinale/turni-rems"
+
+if "data_ancora" not in st.session_state:
+    oggi = datetime.now()
+    st.session_state.data_ancora = oggi - timedelta(days=oggi.weekday())
+
+col_prev, col_testo, col_next = st.columns(3)
+
+with col_prev:
+    if st.button("◀ Settimana Prec.", key="nav_sf_prev", use_container_width=True):
+        st.session_state.data_ancora -= timedelta(days=7)
+        st.rerun()
+
+with col_next:
+    if st.button("Settimana Succ. ▶", key="nav_sf_next", use_container_width=True):
+        st.session_state.data_ancora += timedelta(days=7)
+        st.rerun()
+
+date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
+lun_str = date_sett[0].strftime('%d/%m/%Y')
+dom_str = date_sett[-1].strftime('%d/%m/%Y')
+
+with col_testo:
+    st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
 def carica_turni_settimana():
     if not TOKEN_GITHUB:
@@ -27,6 +71,10 @@ def carica_turni_settimana():
     return {}
 
 archivio_globale = carica_turni_settimana()
+lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
+g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+
+st.markdown("<br/>", unsafe_allow_html=True)
 
 def invia_archivio_github(nuovo_db):
     if not TOKEN_GITHUB:
@@ -92,7 +140,6 @@ for idx, dt in enumerate(date_sett):
                     label=ch_widget, options=lista_ops, index=def_idx, key=ch_widget,
                     label_visibility="collapsed", on_change=salva_turno_callback, args=(ch_widget, k_g, fas, s)
                 )
-
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
@@ -111,8 +158,9 @@ with tab1:
             html_tab += f"<tr style='background-color:{bg}; text-align:center;'><td style='padding:6px; border:1px solid #ddd; font-size:11px;'>{f_txt}</td>"
             for dt in date_sett:
                 tag_f = "mattino" if "09:00" in fas else "pomeriggio"
+                ch_u = f"{dt.strftime('%Y-%m-%d')}_{tag_f}_{s}"
                 v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
-                v_p = f"{v.split(' ', 1)}<br/>{v.split(' ', 1)}" if (" " in v and v != "- Vuoto -" and len(v.split(' ', 1)) > 1) else (v if v != "- Vuoto -" else "")
+                v_p = f"{v.split(' ', 1)[0]}<br/>{v.split(' ', 1)[1]}" if (" " in v and v != "- Vuoto -" and len(v.split(' ', 1)) > 1) else (v if v != "- Vuoto -" else "")
                 html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black; font-weight:bold;'>{v_p}</td>"
             html_tab += "</tr>"
     html_tab += "</tbody></table></div><br/>"
@@ -142,19 +190,17 @@ with tab1:
                 f_txt = testo_orario if s == 2 else ""
                 r = [Paragraph(f_txt, ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=7, alignment=1))]
                 for dt in date_sett:
-                    tag_f = "mattino" if "09:00" in fas else "pomeriggio"
                     v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
                     testo_pulito = v if v != "- Vuoto -" else ""
                     if " " in testo_pulito and len(testo_pulito.split(" ", 1)) > 1:
                         p_n = testo_pulito.split(" ", 1)
-                        testo_pulito = f"{p_n}<br/>{p_n}"
+                        testo_pulito = f"{p_n[0]}<br/>{p_n[1]}"
                     r.append(Paragraph(testo_pulito, c_st_tab))
                 data_pdf.append(r)
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        # Impostazione fissa delle larghezze in pixel reali convertiti matematicamente
-        w_cols = [int(110), int(92), int(92), int(92), int(92), int(92), int(92), int(92)]
+        w_cols = [110, 92, 92, 92, 92, 92, 92, 92]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
         elements_tab.append(t_table)
@@ -181,7 +227,7 @@ with tab2:
         reg = t_c[op]
         sg = ", ".join(g_i[op]) if g_i[op] else "-"
         if reg > 0:
-            op_p = f"{op.split(' ', 1)}<br/>{op.split(' ', 1)}" if (" " in op and len(op.split(' ', 1)) > 1) else op
+            op_p = f"{op.split(' ', 1)[0]}<br/>{op.split(' ', 1)[1]}" if (" " in op and len(op.split(' ', 1)) > 1) else op
             html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc;'>{reg}</td><td style='padding:8px; border:1px solid #ccc;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D;'><b>{reg*ore_g} ore</b></td></tr>"
     html_rep += "</table></div><br/>"
     st.markdown(html_rep, unsafe_allow_html=True)
@@ -203,14 +249,14 @@ with tab2:
             reg = t_c[op]
             stringa_g = ", ".join(g_i[op]) if g_i[op] else "-"
             if reg > 0:
-                op_p = f"{op.split(' ', 1)} {op.split(' ', 1)}" if (" " in op and len(op.split(' ', 1)) > 1) else op
+                op_p = f"{op.split(' ', 1)[0]} {op.split(' ', 1)[1]}" if (" " in op and len(op.split(' ', 1)) > 1) else op
                 data_pdf.append([
                     Paragraph(op_p, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),
                     Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
                 ])
                 
-        w_rep = [int(140), int(50), int(50), int(50), int(150), int(60)]
+        w_rep = [140, 50, 50, 50, 150, 60]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), 
