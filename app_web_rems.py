@@ -2,54 +2,10 @@ import os
 import json
 import base64
 import requests
-import pandas as pd
-import streamlit as st
-from datetime import datetime, timedelta
+import base64
+import requests
 
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-
-st.set_page_config(page_title="Gestione Turni REMS", layout="wide")
-
-DB_OPERATORI = {
-    "ALFONSO SANTANGELO": (5, 6), "ANTONELLA DI BAIA": (5, 5), 
-    "ANTONIO LUBRANO": (5, 6), "DOMENICA VISCONTE": (3, 6), 
-    "GENOVEFFA CAPUANO": (5, 3), "GIULIA ZITIELLO": (5, 5), 
-    "MICHELA AIELLO": (5, 5), "MICHELE CARUSONE": (5, 5), 
-    "NELLO ROMANUCCI": (5, 5), "PAOLA DE PASCALE": (5, 3), 
-    "VALENTINA PEREZ": (5, 1), "VALENTINA ROCCO": (3, 3), 
-    "VINCENZO INTESTINALE": (3, 3)
-}
-FASCE = ["09:00 - 14:00", "15:00 - 20:00"]
-MAX_SLOTS = 5
-FILE_DATI = "archivio_turni_rems_cloud.json"
-
-if "data_ancora" not in st.session_state:
-    oggi = datetime.now()
-    st.session_state.data_ancora = oggi - timedelta(days=oggi.weekday())
-
-col_prev, col_testo, col_next = st.columns(3)
-
-with col_prev:
-    if st.button("◀ Settimana Prec.", key="nav_sf_prev", use_container_width=True):
-        st.session_state.data_ancora -= timedelta(days=7)
-        st.rerun()
-
-with col_next:
-    if st.button("Settimana Succ. ▶", key="nav_sf_next", use_container_width=True):
-        st.session_state.data_ancora += timedelta(days=7)
-        st.rerun()
-
-date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
-lun_str = date_sett[0].strftime('%d/%m/%Y')
-dom_str = date_sett[-1].strftime('%d/%m/%Y')
-
-with col_testo:
-    st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
-
-TOKEN_GITHUB = st.secrets.get("chiave_github", "")
+TOKEN_GITHUB = st.secrets.get("chiave_github", "").strip()
 REPO_GITHUB = "vincenzointestinale/turni-rems"
 
 def carica_turni_settimana():
@@ -71,10 +27,7 @@ def carica_turni_settimana():
     return {}
 
 archivio_globale = carica_turni_settimana()
-lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
-g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 
-st.markdown("<br/>", unsafe_allow_html=True)
 def invia_archivio_github(nuovo_db):
     if not TOKEN_GITHUB:
         try:
