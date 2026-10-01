@@ -254,18 +254,14 @@ with tab2:
             stringa_g = ", ".join(g_i[op]) if g_i[op] else "-"
             if reg > 0:
                 op_p = f"{op.split(' ', 1)[0]} {op.split(' ', 1)[1]}" if (" " in op and len(op.split(' ', 1)) > 1) else op
-data_pdf.append([
-Paragraph(op_p, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),
+data_pdf.append([Paragraph(op_p, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),
 Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
-Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
-])
+Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))])
 w_rep = [140, 50, 50, 50, 150, 60]
 t_rep = Table(data_pdf, colWidths=w_rep)
-t_rep.setStyle(TableStyle([
-('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
+t_rep.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
 ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),
-('BOTTOMPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6)
-]))
+('BOTTOMPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6)]))
 elements_rep.append(t_rep)
 doc_rep.build(elements_rep)
 with open(path_rep, "rb") as file:
