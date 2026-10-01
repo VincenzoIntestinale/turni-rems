@@ -47,12 +47,29 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
+# Modifica le variabili globali inserendo queste due righe subito sotto FILE_DATI
+TOKEN_GITHUB = st.secrets.get("chiave_github", "")
+REPO_GITHUB = "vincenzointestinale/turni-rems"
+
+import base64
+import requests
+
 def carica_turni_settimana():
-    if os.path.exists(FILE_DATI):
-        try:
-            with open(FILE_DATI, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception: pass
+    if not TOKEN_GITHUB:
+        if os.path.exists(FILE_DATI):
+            try:
+                with open(FILE_DATI, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception: pass
+        return {}
+    url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
+    headers = {"Authorization": f"token {TOKEN_GITHUB}"}
+    try:
+        res = requests.get(url, headers=headers)
+        if res.status_code == 200:
+            content = res.json()
+            return json.loads(base64.b64decode(content["content"]).decode("utf-8"))
+    except Exception: pass
     return {}
 
 archivio_globale = carica_turni_settimana()
@@ -60,6 +77,30 @@ lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
 g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 
 st.markdown("<br/>", unsafe_allow_html=True)
+
+def invia_archivio_github(nuovo_db):
+    if not TOKEN_GITHUB:
+        try:
+            with open(FILE_DATI, "w", encoding="utf-8") as f:
+                json.dump(nuovo_db, f, ensure_ascii=False, indent=4)
+        except Exception: pass
+        return
+    url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
+    headers = {"Authorization": f"token {TOKEN_GITHUB}"}
+    sha = None
+    try:
+        res_get = requests.get(url, headers=headers)
+        if res_get.status_code == 200:
+            sha = res_get.json().get("sha")
+        
+        payload = {
+            "message": "Aggiornamento automatico turni REMS",
+            "content": base64.b64encode(json.dumps(nuovo_db, ensure_ascii=False, indent=4).encode("utf-8")).decode("utf-8")
+        }
+        if sha:
+            payload["sha"] = sha
+        requests.put(url, headers=headers, json=payload)
+    except Exception: pass
 
 def salva_turno_callback(ch_w, dt_g, fas, sl):
     scelta = st.session_state[ch_w]
@@ -70,10 +111,7 @@ def salva_turno_callback(ch_w, dt_g, fas, sl):
         db[chiave_unica] = scelta
     else:
         if chiave_unica in db: del db[chiave_unica]
-    try:
-        with open(FILE_DATI, "w", encoding="utf-8") as f:
-            json.dump(db, f, ensure_ascii=False, indent=4)
-    except Exception: pass
+    invia_archivio_github(db)
 
 colonne_giorni = st.columns(7)
 for idx, dt in enumerate(date_sett):
