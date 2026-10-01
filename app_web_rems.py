@@ -46,7 +46,7 @@ with col_next:
         st.rerun()
 
 date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
-lun_str = date_sett[int(0)].strftime('%d/%m/%Y')
+lun_str = date_sett[0].strftime('%d/%m/%Y')
 dom_str = date_sett[-1].strftime('%d/%m/%Y')
 
 with col_testo:
@@ -59,7 +59,7 @@ def carica_turni_settimana():
                     return json.load(f)
             except Exception: pass
         return {}
-        url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
+    url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
     headers = {"Authorization": f"token {TOKEN_GITHUB}"}
     try:
         res = requests.get(url, headers=headers)
@@ -157,7 +157,6 @@ with tab1:
             html_tab += f"<tr style='background-color:{bg}; text-align:center;'><td style='padding:6px; border:1px solid #ddd; font-size:11px;'>{f_txt}</td>"
             for dt in date_sett:
                 v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
-                # CORRETTO: Sostituito lo split grezzo con una visualizzazione testuale fluida e unita
                 v_p = v.replace(" ", "<br/>") if (v != "- Vuoto -" and " " in v) else (v if v != "- Vuoto -" else "")
                 html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black; font-weight:bold;'>{v_p}</td>"
             html_tab += "</tr>"
@@ -197,7 +196,7 @@ with tab1:
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-                w_cols = [int(110), int(92), int(92), int(92), int(92), int(92), int(92), int(92)]
+        w_cols = [int(110), int(92), int(92), int(92), int(92), int(92), int(92), int(92)]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
         elements_tab.append(t_table)
@@ -225,7 +224,6 @@ with tab2:
         reg = t_c[op]
         sg = ", ".join(g_i[op]) if g_i[op] else "-"
         if reg > 0:
-            # CORRETTO: Nome ripulito anche nell'HTML del report ore ore
             op_html = op.replace(" ", "<br/>")
             html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_html}</td><td style='padding:8px; border:1px solid #ccc;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc;'>{reg}</td><td style='padding:8px; border:1px solid #ccc;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D;'><b>{reg*ore_g} ore</b></td></tr>"
     html_rep += "</table></div><br/>"
@@ -248,14 +246,13 @@ with tab2:
             reg = t_c[op]
             stringa_g = ", ".join(g_i[op]) if g_i[op] else "-"
             if reg > 0:
-                # CORRETTO: Nome lineare senza virgolette o parentesi all'interno del PDF verticale
                 data_pdf.append([
                     Paragraph(op, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),
                     Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
                 ])
                 
-                w_rep = [int(140), int(50), int(50), int(50), int(150), int(60)]
+        w_rep = [int(140), int(50), int(50), int(50), int(150), int(60)]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
