@@ -60,7 +60,7 @@ def carica_turni_settimana():
                     return json.load(f)
             except Exception: pass
         return {}
-    url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
+        url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
     headers = {"Authorization": f"token {TOKEN_GITHUB}"}
     try:
         res = requests.get(url, headers=headers)
@@ -83,7 +83,7 @@ def invia_archivio_github(nuovo_db):
                 json.dump(nuovo_db, f, ensure_ascii=False, indent=4)
         except Exception: pass
         return
-    url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
+        url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
     headers = {"Authorization": f"token {TOKEN_GITHUB}"}
     sha = None
     try:
@@ -115,7 +115,7 @@ for k, v in archivio_globale.items():
     if "_" in k:
         parti = k.split("_")
         if len(parti) >= 3:
-            g_data = parti[0]
+            g_data = f"{parti[0]}-{parti[1]}-{parti[2]}"
             if g_data in dati_turni:
                 f_orario = "09:00 - 14:00" if "mattino" in k else "15:00 - 20:00"
                 try:
