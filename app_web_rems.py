@@ -43,7 +43,7 @@ with col_next:
         st.rerun()
 
 date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
-lun_str = date_sett[0].strftime('%d/%m/%Y')
+lun_str = date_sett.strftime('%d/%m/%Y')
 dom_str = date_sett[-1].strftime('%d/%m/%Y')
 
 with col_testo:
@@ -110,19 +110,18 @@ def salva_turno_callback(ch_w, dt_g, fas, sl):
         if chiave_unica in db: del db[chiave_unica]
     invia_archivio_github(db)
 
+# NUOVA LOGICA INDISTRUTTIBILE: Associazione diretta basata sulla corrispondenza del testo iniziale della data
 dati_turni = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_sett}
 for k, v in archivio_globale.items():
-    if "_" in k:
-        parti = k.split("_")
-        if len(parti) >= 3:
-            g_data = f"{parti[0]}-{parti[1]}-{parti[2]}"
-            if g_data in dati_turni:
-                f_orario = "09:00 - 14:00" if "mattino" in k else "15:00 - 20:00"
-                try:
-                    s_idx = int(parti[-1])
-                    if s_idx < MAX_SLOTS:
-                        dati_turni[g_data][f_orario][s_idx] = v
-                except Exception: pass
+    for dt in date_sett:
+        k_g = dt.strftime("%Y-%m-%d")
+        if k.startswith(k_g):
+            f_orario = "09:00 - 14:00" if "mattino" in k else "15:00 - 20:00"
+            try:
+                s_idx = int(k.split("_")[-1])
+                if s_idx < MAX_SLOTS:
+                    dati_turni[k_g][f_orario][s_idx] = v
+            except Exception: pass
 
 colonne_giorni = st.columns(7)
 for idx, dt in enumerate(date_sett):
@@ -161,7 +160,7 @@ with tab1:
             for dt in date_sett:
                 tag_f = "mattino" if "09:00" in fas else "pomeriggio"
                 v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
-                v_p = f"{v.split(' ', 1)[0]}<br/>{v.split(' ', 1)[1]}" if (" " in v and v != "- Vuoto -" and len(v.split(' ', 1)) > 1) else (v if v != "- Vuoto -" else "")
+                v_p = f"{v.split(' ', 1)}<br/>{v.split(' ', 1)}" if (" " in v and v != "- Vuoto -" and len(v.split(' ', 1)) > 1) else (v if v != "- Vuoto -" else "")
                 html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black; font-weight:bold;'>{v_p}</td>"
             html_tab += "</tr>"
     html_tab += "</tbody></table></div><br/>"
@@ -196,7 +195,7 @@ with tab1:
                     testo_pulito = v if v != "- Vuoto -" else ""
                     if " " in testo_pulito and len(testo_pulito.split(" ", 1)) > 1:
                         p_n = testo_pulito.split(" ", 1)
-                        testo_pulito = f"{p_n[0]}<br/>{p_n[1]}"
+                        testo_pulito = f"{p_n}<br/>{p_n}"
                     r.append(Paragraph(testo_pulito, c_st_tab))
                 data_pdf.append(r)
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
@@ -229,7 +228,7 @@ with tab2:
         reg = t_c[op]
         sg = ", ".join(g_i[op]) if g_i[op] else "-"
         if reg > 0:
-            op_p = f"{op.split(' ', 1)[0]}<br/>{op.split(' ', 1)[1]}" if (" " in op and len(op.split(' ', 1)) > 1) else op
+            op_p = f"{op.split(' ', 1)}<br/>{op.split(' ', 1)}" if (" " in op and len(op.split(' ', 1)) > 1) else op
             html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc;'>{reg}</td><td style='padding:8px; border:1px solid #ccc;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D;'><b>{reg*ore_g} ore</b></td></tr>"
     html_rep += "</table></div><br/>"
     st.markdown(html_rep, unsafe_allow_html=True)
@@ -257,7 +256,7 @@ with tab2:
                     Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
                 ])
-        
+                
         w_rep = [140, 50, 50, 50, 150, 60]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
@@ -271,10 +270,4 @@ with tab2:
         elements_rep.append(t_rep)
         doc_rep.build(elements_rep)
         with open(path_rep, "rb") as file:
-            st.download_button(
-                label="📥 Scarica il PDF del Report Ore", 
-                data=file, 
-                file_name=f"Report_Ore_{lun_str.replace('/', '_')}.pdf", 
-                mime="application/pdf", 
-                use_container_width=True
-            )
+            st.download_button(label="📥 Scarica il PDF del Report Ore", data=file, file_name=f"Report_Ore_{lun_str.replace('/', '_')}.pdf", mime="application/pdf", use_container_width=True)
