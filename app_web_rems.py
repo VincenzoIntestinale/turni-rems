@@ -259,8 +259,7 @@ Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphSt
 ])
 w_rep = [140, 50, 50, 50, 150, 60]
 t_rep = Table(data_pdf, colWidths=w_rep)
-t_rep.setStyle(TableStyle([
-('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
+t_rep.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
 ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),
 ('BOTTOMPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6)
 ]))
