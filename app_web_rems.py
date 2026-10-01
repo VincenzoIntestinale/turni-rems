@@ -200,7 +200,8 @@ with tab1:
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
                 r_idx += 1
                 
-        w_cols = [110, 92, 92, 92, 92, 92, 92, 92]
+        # Impostazione fissa delle larghezze in pixel reali convertiti matematicamente
+        w_cols = [int(110), int(92), int(92), int(92), int(92), int(92), int(92), int(92)]
         t_table = Table(data_pdf, colWidths=w_cols)
         t_table.setStyle(TableStyle(r_styles))
         elements_tab.append(t_table)
@@ -234,8 +235,6 @@ with tab2:
     
     if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
         path_rep = "Report_Ore_REMS.pdf"
-    if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
-        path_rep = "Report_Ore_REMS.pdf"
         doc_rep = SimpleDocTemplate(path_rep, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
         elements_rep = list()
         styles_rep = getSampleStyleSheet()
@@ -251,14 +250,14 @@ with tab2:
             reg = t_c[op]
             stringa_g = ", ".join(g_i[op]) if g_i[op] else "-"
             if reg > 0:
-                op_p = f"{op.split(' ', 1)[0]} {op.split(' ', 1)[1]}" if (" " in op and len(op.split(' ', 1)) > 1) else op
+                op_p = f"{op.split(' ', 1)} {op.split(' ', 1)}" if (" " in op and len(op.split(' ', 1)) > 1) else op
                 data_pdf.append([
                     Paragraph(op_p, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),
                     Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
                 ])
                 
-        w_rep = [140, 50, 50, 50, 150, 60]
+        w_rep = [int(140), int(50), int(50), int(50), int(150), int(60)]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), 
