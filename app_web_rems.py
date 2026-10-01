@@ -49,10 +49,14 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-TOKEN_GITHUB = st.secrets.get("chiave_github", "")
+TOKEN_GITHUB = st.secrets.get("chiave_github", "").strip()
 REPO_GITHUB = "vincenzointestinale/turni-rems"
 
-def carica_turni_settimana():
+# Avviso diagnostico visibile solo a te per testare la cassaforte dei Secrets
+if not TOKEN_GITHUB:
+    st.error("⚠️ ATTENZIONE: Il Token 'chiave_github' non è letto nei Secrets. L'app salverà solo in temporaneo.")
+
+def scarica_archivio_github():
     if not TOKEN_GITHUB:
         if os.path.exists(FILE_DATI):
             try:
@@ -60,7 +64,7 @@ def carica_turni_settimana():
                     return json.load(f)
             except Exception: pass
         return {}
-        url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
+    url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
     headers = {"Authorization": f"token {TOKEN_GITHUB}"}
     try:
         res = requests.get(url, headers=headers)
@@ -70,12 +74,11 @@ def carica_turni_settimana():
     except Exception: pass
     return {}
 
-archivio_globale = carica_turni_settimana()
+archivio_globale = scarica_archivio_github()
 lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
 g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 
 st.markdown("<br/>", unsafe_allow_html=True)
-
 def invia_archivio_github(nuovo_db):
     if not TOKEN_GITHUB:
         try:
@@ -83,7 +86,7 @@ def invia_archivio_github(nuovo_db):
                 json.dump(nuovo_db, f, ensure_ascii=False, indent=4)
         except Exception: pass
         return
-        url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
+    url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
     headers = {"Authorization": f"token {TOKEN_GITHUB}"}
     sha = None
     try:
@@ -97,24 +100,29 @@ def invia_archivio_github(nuovo_db):
         }
         if sha:
             payload["sha"] = sha
-        requests.put(url, headers=headers, json=payload)
-    except Exception: pass
+        res_put = requests.put(url, headers=headers, json=payload)
+        if res_put.status_code not in:
+            st.error(f"⚠️ Errore scrittura GitHub: {res_put.status_code} - {res_put.text}")
+    except Exception as e:
+        st.error(f"⚠️ Eccezione invio: {str(e)}")
 
 def salva_turno_callback(ch_w, dt_g, fas, sl):
     scelta = st.session_state[ch_w]
     tag_f = "mattino" if "09:00" in fas else "pomeriggio"
     chiave_unica = f"{dt_g}_{tag_f}_{sl}"
-    db = carica_turni_settimana()
+    db = scarica_archivio_github()
     if scelta != "- Vuoto -":
         db[chiave_unica] = scelta
     else:
         if chiave_unica in db: del db[chiave_unica]
     invia_archivio_github(db)
+
 dati_turni = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_sett}
 for k, v in archivio_globale.items():
     if "_" in k:
         parti = k.split("_")
         if len(parti) >= 3:
+            # CORRETTO: Ricostruzione esatta con indici numerici bloccati tra parentesi quadre
             g_data = f"{parti[0]}-{parti[1]}-{parti[2]}"
             if g_data in dati_turni:
                 f_orario = "09:00 - 14:00" if "mattino" in k else "15:00 - 20:00"
@@ -160,10 +168,9 @@ with tab1:
             html_tab += f"<tr style='background-color:{bg}; text-align:center;'><td style='padding:6px; border:1px solid #ddd; font-size:11px;'>{f_txt}</td>"
             for dt in date_sett:
                 tag_f = "mattino" if "09:00" in fas else "pomeriggio"
-                ch_u = f"{dt.strftime('%Y-%m-%d')}_{tag_f}_{s}"
                 v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
                 v_p = f"{v.split(' ', 1)[0]}<br/>{v.split(' ', 1)[1]}" if (" " in v and v != "- Vuoto -" and len(v.split(' ', 1)) > 1) else (v if v != "- Vuoto -" else "")
-                html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black;'>{v_p}</td>"
+                html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black; font-weight:bold;'>{v_p}</td>"
             html_tab += "</tr>"
     html_tab += "</tbody></table></div><br/>"
     st.markdown(html_tab, unsafe_allow_html=True)
@@ -193,7 +200,6 @@ with tab1:
                 r = [Paragraph(f_txt, ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=7, alignment=1))]
                 for dt in date_sett:
                     tag_f = "mattino" if "09:00" in fas else "pomeriggio"
-                    ch_u = f"{dt.strftime('%Y-%m-%d')}_{tag_f}_{s}"
                     v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
                     testo_pulito = v if v != "- Vuoto -" else ""
                     if " " in testo_pulito and len(testo_pulito.split(" ", 1)) > 1:
@@ -232,44 +238,43 @@ with tab2:
         sg = ", ".join(g_i[op]) if g_i[op] else "-"
         if reg > 0:
             op_p = f"{op.split(' ', 1)[0]}<br/>{op.split(' ', 1)[1]}" if (" " in op and len(op.split(' ', 1)) > 1) else op
-            html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc;'>{reg}</td><td style='padding:8px; border:1px solid #ccc;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D;'><b>{reg*ore_g} ore</b></td></tr>"
-    html_rep += "</table></div><br/>"
-    st.markdown(html_rep, unsafe_allow_html=True)
-    
-    if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
-        path_rep = "Report_Ore_REMS.pdf"
-        doc_rep = SimpleDocTemplate(path_rep, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
-        elements_rep = list()
-        styles_rep = getSampleStyleSheet()
-        t_st_rep = ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=20)
-        c_st_rep = ParagraphStyle('C', fontName='Helvetica', fontSize=9, alignment=1)
-        h_st_rep = ParagraphStyle('H', fontName='Helvetica-Bold', fontSize=10, alignment=1, textColor=colors.white)
-        
-        elements_rep.append(Paragraph(f"REPORT - PROGRAMMAZIONE TURNI REMS - DAL {lun_str} AL {dom_str}", t_st_rep))
-        headers_pdf = [Paragraph("OPERATORE", h_st_rep), Paragraph("ORE S.", h_st_rep), Paragraph("PREV.", h_st_rep), Paragraph("EFF.", h_st_rep), Paragraph("GIORNI IMPIEGATI", h_st_rep), Paragraph("ORE TOT.", h_st_rep)]
-        data_pdf = [headers_pdf]
-        
-        for op, (ore_g, da_f) in DB_OPERATORI.items():
-            reg = t_c[op]
-            stringa_g = ", ".join(g_i[op]) if g_i[op] else "-"
-            if reg > 0:
-                op_p = f"{op.split(' ', 1)[0]} {op.split(' ', 1)[1]}" if (" " in op and len(op.split(' ', 1)) > 1) else op
-                data_pdf.append([
-                    Paragraph(op_p, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),
-                    Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
-                    Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
-                ])
-        w_rep = [140, 50, 50, 50, 150, 60]
-        t_rep = Table(data_pdf, colWidths=w_rep)
-        t_rep.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), 
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), 
-            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 6), 
-            ('TOPPADDING', (0,0), (-1,-1), 6)
-        ]))
-        elements_rep.append(t_rep)
-        doc_rep.build(elements_rep)
-        with open(path_rep, "rb") as file:
-            st.download_button(label="📥 Scarica il PDF del Report Ore", data=file, file_name=f"Report_Ore_{lun_str.replace('/', '_')}.pdf", mime="application/pdf", use_container_width=True)
+html_rep += f"{op_p}{ore_g}{da_f}{reg}{sg}{reg*ore_g} ore"
+html_rep += ""
+st.markdown(html_rep, unsafe_allow_html=True)
+if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
+            path_rep = "Report_Ore_REMS.pdf"
+doc_rep = SimpleDocTemplate(path_rep, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
+elements_rep = list()
+styles_rep = getSampleStyleSheet()
+t_st_rep = ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=20)
+c_st_rep = ParagraphStyle('C', fontName='Helvetica', fontSize=9, alignment=1)
+h_st_rep = ParagraphStyle('H', fontName='Helvetica-Bold', fontSize=10, alignment=1, textColor=colors.white)
+elements_rep.append(Paragraph(f"REPORT - PROGRAMMAZIONE TURNI REMS - DAL {lun_str} AL {dom_str}", t_st_rep))
+headers_pdf = [Paragraph("OPERATORE", h_st_rep), Paragraph("ORE S.", h_st_rep), Paragraph("PREV.", h_st_rep), Paragraph("EFF.", h_st_rep), Paragraph("GIORNI IMPIEGATI", h_st_rep), Paragraph("ORE TOT.", h_st_rep)]
+data_pdf = [headers_pdf]
+for op, (ore_g, da_f) in DB_OPERATORI.items():
+    reg = t_c[op]
+stringa_g = ", ".join(g_i[op]) if g_i[op] else "-"
+if reg > 0:
+    op_p = f"{op.split(' ', 1)[0]} {op.split(' ', 1)[1]}" if (" " in op and len(op.split(' ', 1)) > 1) else op
+data_pdf.append([
+Paragraph(op_p, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),
+Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
+Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
+])
+w_rep = [140, 50, 50, 50, 150, 60]
+t_rep = Table(data_pdf, colWidths=w_rep)
+t_rep.setStyle(TableStyle([
+('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")),
+('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
+('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),
+('BOTTOMPADDING', (0,0), (-1,-1), 6),
+('TOPPADDING', (0,0), (-1,-1), 6)
+]))
+elements_rep.append(t_rep)
+doc_rep.build(elements_rep)
+with open(path_rep, "rb") as file:
+    st.download_button(label="📥 Scarica il PDF del Report Ore", data=file, 
+                       file_name=f"Report_Ore_{lun_str.replace('/', '_')}.pdf", mime="application/pdf", 
+                       use_container_width=True)
