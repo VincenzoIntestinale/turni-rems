@@ -43,7 +43,6 @@ with col_next:
         st.rerun()
 
 date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
-# CORRETTO: Aggiunto l'indice [0] per estrarre correttamente la data del Lunedì dalla lista
 lun_str = date_sett[0].strftime('%d/%m/%Y')
 dom_str = date_sett[-1].strftime('%d/%m/%Y')
 
@@ -76,32 +75,7 @@ lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
 g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 
 st.markdown("<br/>", unsafe_allow_html=True)
-st.markdown("<br/><hr/>", unsafe_allow_html=True)
-st.subheader("🖨️ Centro Stampa Documenti")
-tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
-
-with tab1:
-    html_tab = f"<div id='sez_stampa_tab'><h2 style='text-align:center; font-family:Arial; color:#1F538D;'>PROGRAMMAZIONE TURNI REMS - SETTIMANA DAL {lun_str} AL {dom_str}</h2>"
-    html_tab += "<table style='width:100%; border-collapse:collapse; font-family:Arial; border:1px solid #1F538D;'><thead><tr style='background-color:#1F538D; color:white;'><th style='padding:8px; border:1px solid #1F538D; width:12%;'>Fascia Oraria</th>"
-    for i, d in enumerate(date_sett):
-        html_tab += f"<th style='padding:8px; border:1px solid #1F538D; width:12.5%;'>{g_nomi[i]}<br/>{d.strftime('%d/%m')}</th>"
-    html_tab += "</tr></thead><tbody>"
-    for fas in FASCE:
-        bg = "#FFF1E0" if "09:00" in fas else "#F3E5F5"
-        txt_orario = "MATTINO<br/>dalle ore 09:00<br/>alle ore 14:00" if "09:00" in fas else "POMERIGGIO<br/>dalle ore 15:00<br/>alle ore 20:00"
-        for s in range(MAX_SLOTS):
-            f_txt = f"<b>{txt_orario}</b>" if s == 2 else ""
-            html_tab += f"<tr style='background-color:{bg}; text-align:center;'><td style='padding:6px; border:1px solid #ddd; font-size:11px;'>{f_txt}</td>"
-            for dt in date_sett:
-                tag_f = "mattino" if "09:00" in fas else "pomeriggio"
-                v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
-                v_p = f"{v.split(' ', 1)[0]}<br/>{v.split(' ', 1)[1]}" if (" " in v and v != "- Vuoto -" and len(v.split(' ', 1)) > 1) else (v if v != "- Vuoto -" else "")
-                html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black; font-weight:bold;'>{v_p}</td>"
-            html_tab += "</tr>"
-    html_tab += "</tbody></table></div><br/>"
-    st.markdown(html_tab, unsafe_allow_html=True)
-    
-    def invia_archivio_github(nuovo_db):
+def invia_archivio_github(nuovo_db):
     if not TOKEN_GITHUB:
         try:
             with open(FILE_DATI, "w", encoding="utf-8") as f:
@@ -165,6 +139,7 @@ for idx, dt in enumerate(date_sett):
                     label=ch_widget, options=lista_ops, index=def_idx, key=ch_widget,
                     label_visibility="collapsed", on_change=salva_turno_callback, args=(ch_widget, k_g, fas, s)
                 )
+
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
@@ -182,8 +157,9 @@ with tab1:
             f_txt = f"<b>{txt_orario}</b>" if s == 2 else ""
             html_tab += f"<tr style='background-color:{bg}; text-align:center;'><td style='padding:6px; border:1px solid #ddd; font-size:11px;'>{f_txt}</td>"
             for dt in date_sett:
+                tag_f = "mattino" if "09:00" in fas else "pomeriggio"
                 v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
-                v_p = f"{v.split(' ', 1)[0]}<br/>{v.split(' ', 1)[1]}" if (" " in v and v != "- Vuoto -" and len(v.split(' ', 1)) > 1) else (v if v != "- Vuoto -" else "")
+                v_p = f"{v.split(' ', 1)}<br/>{v.split(' ', 1)}" if (" " in v and v != "- Vuoto -" and len(v.split(' ', 1)) > 1) else (v if v != "- Vuoto -" else "")
                 html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black; font-weight:bold;'>{v_p}</td>"
             html_tab += "</tr>"
     html_tab += "</tbody></table></div><br/>"
@@ -213,11 +189,12 @@ with tab1:
                 f_txt = testo_orario if s == 2 else ""
                 r = [Paragraph(f_txt, ParagraphStyle('F', fontName='Helvetica-Bold', fontSize=7, alignment=1))]
                 for dt in date_sett:
+                    tag_f = "mattino" if "09:00" in fas else "pomeriggio"
                     v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
                     testo_pulito = v if v != "- Vuoto -" else ""
                     if " " in testo_pulito and len(testo_pulito.split(" ", 1)) > 1:
                         p_n = testo_pulito.split(" ", 1)
-                        testo_pulito = f"{p_n[0]}<br/>{p_n[1]}"
+                        testo_pulito = f"{p_n}<br/>{p_n}"
                     r.append(Paragraph(testo_pulito, c_st_tab))
                 data_pdf.append(r)
                 r_styles.append(('BACKGROUND', (0, r_idx), (-1, r_idx), bg_c))
@@ -250,11 +227,13 @@ with tab2:
         reg = t_c[op]
         sg = ", ".join(g_i[op]) if g_i[op] else "-"
         if reg > 0:
-            op_p = f"{op.split(' ', 1)[0]}<br/>{op.split(' ', 1)[1]}" if (" " in op and len(op.split(' ', 1)) > 1) else op
+            op_p = f"{op.split(' ', 1)}<br/>{op.split(' ', 1)}" if (" " in op and len(op.split(' ', 1)) > 1) else op
             html_rep += f"<tr style='text-align:center;'><td style='padding:8px; border:1px solid #ccc; text-align:left; font-weight:bold; font-size:12px; color:black;'>{op_p}</td><td style='padding:8px; border:1px solid #ccc;'>{ore_g}</td><td style='padding:8px; border:1px solid #ccc;'>{da_f}</td><td style='padding:8px; border:1px solid #ccc;'>{reg}</td><td style='padding:8px; border:1px solid #ccc;'>{sg}</td><td style='padding:8px; border:1px solid #ccc; color:#1F538D;'><b>{reg*ore_g} ore</b></td></tr>"
     html_rep += "</table></div><br/>"
     st.markdown(html_rep, unsafe_allow_html=True)
     
+    if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
+        path_rep = "Report_Ore_REMS.pdf"
     if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
         path_rep = "Report_Ore_REMS.pdf"
         doc_rep = SimpleDocTemplate(path_rep, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
@@ -278,6 +257,7 @@ with tab2:
                     Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
                     Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
                 ])
+                
         w_rep = [140, 50, 50, 50, 150, 60]
         t_rep = Table(data_pdf, colWidths=w_rep)
         t_rep.setStyle(TableStyle([
