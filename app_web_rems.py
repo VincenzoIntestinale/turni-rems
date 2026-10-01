@@ -62,7 +62,7 @@ def carica_turni_settimana():
                     return json.load(f)
             except Exception: pass
         return {}
-    url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
+        url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
     headers = {"Authorization": f"token {TOKEN_GITHUB}"}
     try:
         res = requests.get(url, headers=headers)
