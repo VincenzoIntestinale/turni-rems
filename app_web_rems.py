@@ -1,5 +1,7 @@
 import os
 import json
+import base64
+import requests
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
@@ -47,12 +49,8 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# Modifica le variabili globali inserendo queste due righe subito sotto FILE_DATI
 TOKEN_GITHUB = st.secrets.get("chiave_github", "")
 REPO_GITHUB = "vincenzointestinale/turni-rems"
-
-import base64
-import requests
 
 def carica_turni_settimana():
     if not TOKEN_GITHUB:
@@ -62,7 +60,7 @@ def carica_turni_settimana():
                     return json.load(f)
             except Exception: pass
         return {}
-        url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
+    url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
     headers = {"Authorization": f"token {TOKEN_GITHUB}"}
     try:
         res = requests.get(url, headers=headers)
@@ -77,7 +75,6 @@ lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
 g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 
 st.markdown("<br/>", unsafe_allow_html=True)
-
 def invia_archivio_github(nuovo_db):
     if not TOKEN_GITHUB:
         try:
@@ -113,6 +110,20 @@ def salva_turno_callback(ch_w, dt_g, fas, sl):
         if chiave_unica in db: del db[chiave_unica]
     invia_archivio_github(db)
 
+dati_turni = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_sett}
+for k, v in archivio_globale.items():
+    if "_" in k:
+        parti = k.split("_")
+        if len(parti) >= 3:
+            g_data = parti
+            if g_data in dati_turni:
+                f_orario = "09:00 - 14:00" if "mattino" in k else "15:00 - 20:00"
+                try:
+                    s_idx = int(parti[-1])
+                    if s_idx < MAX_SLOTS:
+                        dati_turni[g_data][f_orario][s_idx] = v
+                except Exception: pass
+
 colonne_giorni = st.columns(7)
 for idx, dt in enumerate(date_sett):
     k_g = dt.strftime("%Y-%m-%d")
@@ -123,14 +134,14 @@ for idx, dt in enumerate(date_sett):
             st.markdown(f"<div style='background-color:{bg_c}; padding:4px; margin-top:8px; border-radius:4px; text-align:center; font-size:11px; font-weight:bold; color:#333; font-family:Arial;'>🕒 {fas}</div>", unsafe_allow_html=True)
             for s in range(MAX_SLOTS):
                 tag_f = "mattino" if "09:00" in fas else "pomeriggio"
-                ch_u = f"{k_g}_{tag_f}_{s}"
-                valore_attuale = archivio_globale.get(ch_u, "- Vuoto -")
+                valore_attuale = dati_turni[k_g][fas][s]
                 def_idx = lista_ops.index(valore_attuale) if valore_attuale in lista_ops else 0
                 ch_widget = f"w_sel_{k_g}_{tag_f}_{s}"
                 st.selectbox(
                     label=ch_widget, options=lista_ops, index=def_idx, key=ch_widget,
                     label_visibility="collapsed", on_change=salva_turno_callback, args=(ch_widget, k_g, fas, s)
                 )
+
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
@@ -150,9 +161,9 @@ with tab1:
             for dt in date_sett:
                 tag_f = "mattino" if "09:00" in fas else "pomeriggio"
                 ch_u = f"{dt.strftime('%Y-%m-%d')}_{tag_f}_{s}"
-                v = archivio_globale.get(ch_u, "- Vuoto -")
+                v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
                 v_p = f"{v.split(' ', 1)[0]}<br/>{v.split(' ', 1)[1]}" if (" " in v and v != "- Vuoto -" and len(v.split(' ', 1)) > 1) else (v if v != "- Vuoto -" else "")
-                html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black;'>{v_p}</td>"
+                html_tab += f"<td style='padding:6px; border:1px solid #ddd; font-size:11px; color:black; font-weight:bold;'>{v_p}</td>"
             html_tab += "</tr>"
     html_tab += "</tbody></table></div><br/>"
     st.markdown(html_tab, unsafe_allow_html=True)
@@ -183,7 +194,7 @@ with tab1:
                 for dt in date_sett:
                     tag_f = "mattino" if "09:00" in fas else "pomeriggio"
                     ch_u = f"{dt.strftime('%Y-%m-%d')}_{tag_f}_{s}"
-                    v = archivio_globale.get(ch_u, "- Vuoto -")
+                    v = dati_turni[dt.strftime("%Y-%m-%d")][fas][s]
                     testo_pulito = v if v != "- Vuoto -" else ""
                     if " " in testo_pulito and len(testo_pulito.split(" ", 1)) > 1:
                         p_n = testo_pulito.split(" ", 1)
@@ -209,9 +220,7 @@ with tab2:
         k_g = dt.strftime("%Y-%m-%d")
         for fas in FASCE:
             for s in range(MAX_SLOTS):
-                tag_f = "mattino" if "09:00" in fas else "pomeriggio"
-                ch_u = f"{k_g}_{tag_f}_{s}"
-                op = archivio_globale.get(ch_u, "- Vuoto -")
+                op = dati_turni[k_g][fas][s]
                 if op in t_c:
                     t_c[op] += 1
                     if g_n_it[idx] not in g_i[op]: g_i[op].append(g_n_it[idx])
@@ -227,37 +236,42 @@ with tab2:
     html_rep += "</table></div><br/>"
     st.markdown(html_rep, unsafe_allow_html=True)
     
-    if st.button("📊 Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
+    if st.button("🖨️ Genera PDF Report Ore", key="gen_pdf_rep_btn", use_container_width=True):
         path_rep = "Report_Ore_REMS.pdf"
-        doc_rep = SimpleDocTemplate(path_rep, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
-        elements_rep = list()
-        styles_rep = getSampleStyleSheet()
-        t_st_rep = ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=20)
-        c_st_rep = ParagraphStyle('C', fontName='Helvetica', fontSize=9, alignment=1)
-        h_st_rep = ParagraphStyle('H', fontName='Helvetica-Bold', fontSize=10, alignment=1, textColor=colors.white)
-        
-        elements_rep.append(Paragraph(f"REPORT - PROGRAMMAZIONE TURNI REMS - DAL {lun_str} AL {dom_str}", t_st_rep))
-        headers_pdf = [Paragraph("OPERATORE", h_st_rep), Paragraph("ORE S.", h_st_rep), Paragraph("PREV.", h_st_rep), Paragraph("EFF.", h_st_rep), Paragraph("GIORNI IMPIEGATI", h_st_rep), Paragraph("ORE TOT.", h_st_rep)]
-        data_pdf = [headers_pdf]
-        
-        for op, (ore_g, da_f) in DB_OPERATORI.items():
-            reg = t_c[op]
-            stringa_g = ", ".join(g_i[op]) if g_i[op] else "-"
-            if reg > 0:
-                op_p = f"{op.split(' ', 1)[0]} {op.split(' ', 1)[1]}" if (" " in op and len(op.split(' ', 1)) > 1) else op
-                data_pdf.append([
-                    Paragraph(op_p, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),
-                    Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
-                    Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
-                ])
-        w_rep = [150, 60, 60, 60, 120, 70]
-        t_rep = Table(data_pdf, colWidths=w_rep)
-        t_rep.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6)
-        ]))
-        elements_rep.append(t_rep)
-        doc_rep.build(elements_rep)
-        with open(path_rep, "rb") as file:
-            st.download_button(label="📥 Scarica il PDF del Report Ore", data=file, file_name=f"Report_Ore_{lun_str.replace('/', '_')}.pdf", mime="application/pdf", use_container_width=True)
+doc_rep = SimpleDocTemplate(path_rep, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
+elements_rep = list()
+styles_rep = getSampleStyleSheet()
+t_st_rep = ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=11, alignment=1, spaceAfter=20)
+c_st_rep = ParagraphStyle('C', fontName='Helvetica', fontSize=9, alignment=1)
+h_st_rep = ParagraphStyle('H', fontName='Helvetica-Bold', fontSize=10, alignment=1, textColor=colors.white)
+elements_rep.append(Paragraph(f"REPORT - PROGRAMMAZIONE TURNI REMS - DAL {lun_str} AL {dom_str}", t_st_rep))
+headers_pdf = [Paragraph("OPERATORE", h_st_rep), 
+               Paragraph("ORE S.", h_st_rep), 
+               Paragraph("PREV.", h_st_rep), 
+               Paragraph("EFF.", h_st_rep), 
+               Paragraph("GIORNI IMPIEGATI", h_st_rep), 
+               Paragraph("ORE TOT.", h_st_rep)]
+data_pdf = [headers_pdf]
+for op, (ore_g, da_f) in DB_OPERATORI.items():
+    reg = t_c[op]
+stringa_g = ", ".join(g_i[op]) if g_i[op] else "-"
+if reg > 0:
+    op_p = f"{op.split(' ', 1)[0]} {op.split(' ', 1)[1]}" if (" " in op and len(op.split(' ', 1)) > 1) else op
+data_pdf.append([
+Paragraph(op_p, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),
+Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
+Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
+])
+w_rep = [140, 55, 55, 55, 140, 75]
+t_rep = Table(data_pdf, colWidths=w_rep)
+t_rep.setStyle(TableStyle([
+('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1F538D")), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")),
+('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#F9F9F9")]),
+('BOTTOMPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6)
+]))
+elements_rep.append(t_rep)
+doc_rep.build(elements_rep)
+with open(path_rep, "rb") as file:
+    st.download_button(label="📥 Scarica il PDF del Report Ore", data=file, 
+                       file_name=f"Report_Ore_{lun_str.replace('/', '_')}.pdf", mime="application/pdf", 
+                       use_container_width=True)
