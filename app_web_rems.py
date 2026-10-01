@@ -86,8 +86,7 @@ def invia_archivio_github(nuovo_db):
                 json.dump(nuovo_db, f, ensure_ascii=False, indent=4)
         except Exception: pass
         return
-    # INDIRIZZO CORRETTO: ://github.com per collegarsi stabilmente alla cartella
-    url = f"https://://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
+    url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
     headers = {"Authorization": f"token {TOKEN_GITHUB}"}
     sha = None
     try:
@@ -101,12 +100,10 @@ def invia_archivio_github(nuovo_db):
         }
         if sha:
             payload["sha"] = sha
-        res_put = requests.put(url, headers=headers, json=payload)
-        # CORRETTO: Specificati i codici di successo 200 e 201 per evitare il blocco di sintassi
-        if res_put.status_code not in:
-            st.error(f"⚠️ Errore scrittura GitHub: {res_put.status_code}")
+        requests.put(url, headers=headers, json=payload)
     except Exception as e:
         st.error(f"⚠️ Eccezione invio: {str(e)}")
+
 def salva_turno_callback(ch_w, dt_g, fas, sl):
     scelta = st.session_state[ch_w]
     tag_f = "mattino" if "09:00" in fas else "pomeriggio"
