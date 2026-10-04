@@ -1,7 +1,5 @@
 import os
 import json
-import base64
-import requests
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
@@ -26,9 +24,6 @@ FASCE = ["09:00 - 14:00", "15:00 - 20:00"]
 MAX_SLOTS = 5
 FILE_DATI = "archivio_turni_rems_cloud.json"
 
-TOKEN_GITHUB = st.secrets.get("chiave_github", "").strip()
-REPO_GITHUB = "vincenzointestinale/turni-rems"
-
 if "data_ancora" not in st.session_state:
     oggi = datetime.now()
     st.session_state.data_ancora = oggi - timedelta(days=oggi.weekday())
@@ -46,29 +41,17 @@ with col_next:
         st.rerun()
 
 date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
-lun_str = date_sett[0].strftime('%d/%m/%Y')
+lun_str = date_sett[int(0)].strftime('%d/%m/%Y')
 dom_str = date_sett[-1].strftime('%d/%m/%Y')
 
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 def carica_turni_settimana():
-    if not TOKEN_GITHUB:
-        if os.path.exists(FILE_DATI):
-            try:
-                with open(FILE_DATI, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception: pass
-        return {}
-    # CORRETTO: Ricomposizione protetta per forzare il percorso sui server ://github.com
-    inizio_url = "https://" + "api." + "://github.com" + "repos/"
-    url = f"{inizio_url}{REPO_GITHUB}/contents/{FILE_DATI}"
-    headers = {"Authorization": f"token {TOKEN_GITHUB}"}
-    try:
-        res = requests.get(url, headers=headers)
-        if res.status_code == 200:
-            content = res.json()
-            return json.loads(base64.b64decode(content["content"]).decode("utf-8"))
-    except Exception: pass
+    if os.path.exists(FILE_DATI):
+        try:
+            with open(FILE_DATI, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception: pass
     return {}
 
 archivio_globale = carica_turni_settimana()
@@ -76,32 +59,6 @@ lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
 g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 
 st.markdown("<br/>", unsafe_allow_html=True)
-
-def invia_archivio_github(nuovo_db):
-    if not TOKEN_GITHUB:
-        try:
-            with open(FILE_DATI, "w", encoding="utf-8") as f:
-                json.dump(nuovo_db, f, ensure_ascii=False, indent=4)
-        except Exception: pass
-        return
-    # CORRETTO: Ricomposizione protetta per forzare il percorso sui server ://github.com
-    inizio_url = "https://" + "api." + "://github.com" + "repos/"
-    url = f"{inizio_url}{REPO_GITHUB}/contents/{FILE_DATI}"
-    headers = {"Authorization": f"token {TOKEN_GITHUB}"}
-    sha = None
-    try:
-        res_get = requests.get(url, headers=headers)
-        if res_get.status_code == 200:
-            sha = res_get.json().get("sha")
-        
-        payload = {
-            "message": "Aggiornamento automatico turni REMS",
-            "content": base64.b64encode(json.dumps(nuovo_db, ensure_ascii=False, indent=4).encode("utf-8")).decode("utf-8")
-        }
-        if sha:
-            payload["sha"] = sha
-        requests.put(url, headers=headers, json=payload)
-    except Exception: pass
 
 def salva_turno_callback(ch_w, dt_g, fas, sl):
     scelta = st.session_state[ch_w]
@@ -112,7 +69,10 @@ def salva_turno_callback(ch_w, dt_g, fas, sl):
         db[chiave_unica] = scelta
     else:
         if chiave_unica in db: del db[chiave_unica]
-    invia_archivio_github(db)
+    try:
+        with open(FILE_DATI, "w", encoding="utf-8") as f:
+            json.dump(db, f, ensure_ascii=False, indent=4)
+    except Exception: pass
 
 dati_turni = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_sett}
 for k, operatore_nome in archivio_globale.items():
