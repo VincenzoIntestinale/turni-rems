@@ -18,6 +18,7 @@ DB_OPERATORI = {
 }
 FASCE = ["09:00 - 14:00", "15:00 - 20:00"]
 MAX_SLOTS = 5
+FILE_DATI = "archivio_turni_rems_cloud.json"
 
 if "data_ancora" not in st.session_state:
     oggi = datetime.now()
@@ -36,13 +37,13 @@ with col_next:
         st.rerun()
 
 date_sett = [st.session_state.data_ancora + timedelta(days=i) for i in range(7)]
-lun_str = date_sett[int(0)].strftime('%d/%m/%Y')
+lun_str = date_sett[0].strftime('%d/%m/%Y')
 dom_str = date_sett[-1].strftime('%d/%m/%Y')
 
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
 
-# Connessione locale/cloud protetta di Streamlit
+# Connessione remota sicura di Streamlit
 conn = st.connection("local_db", type="sql", url="sqlite:///archivioremsproteg.db")
 
 with conn.session as session:
@@ -65,6 +66,42 @@ g_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 st.markdown("<br/>", unsafe_allow_html=True)
 
+import base64
+import requests
+
+TOKEN_GITHUB = st.secrets.get("chiave_github", "").strip()
+REPO_GITHUB = "vincenzointestinale/turni-rems"
+
+def invia_backup_github():
+    if not TOKEN_GITHUB:
+        return
+    try:
+        dati_aggiornati = {}
+        df = conn.query("SELECT chiave, operatore FROM turni;", ttl=0)
+        if df is not None and not df.empty:
+            for _, row in df.iterrows():
+                dati_aggiornati[str(row["chiave"])] = str(row["operatore"])
+        
+        # INDIRIZZO API CORRETTO: ://github.com per la comunicazione remota
+        url = f"https://://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
+        headers = {"Authorization": f"token {TOKEN_GITHUB}"}
+        sha = None
+        
+        res_get = requests.get(url, headers=headers)
+        if res_get.status_code == 200:
+            sha = res_get.json().get("sha")
+            
+        payload = {
+            "message": "Backup automatico permanente turni REMS",
+            "content": base64.b64encode(json.dumps(dati_aggiornati, ensure_ascii=False, indent=4).encode("utf-8")).decode("utf-8")
+        }
+        if sha:
+            payload["sha"] = sha
+            
+        requests.put(url, headers=headers, json=payload)
+    except Exception:
+        pass
+
 def salva_turno_callback(ch_w, dt_g, fas, sl):
     scelta = st.session_state[ch_w]
     tag_f = "mattino" if "09:00" in fas else "pomeriggio"
@@ -75,6 +112,8 @@ def salva_turno_callback(ch_w, dt_g, fas, sl):
         if scelta != "- Vuoto -":
             session.execute(text("INSERT INTO turni (chiave, operatore) VALUES (:ch, :op);"), {"ch": chiave_unica, "op": scelta})
         session.commit()
+    
+    invia_backup_github()
 
 dati_turni = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_sett}
 for k, operatore_nome in archivio_globale.items():
