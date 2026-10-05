@@ -3,11 +3,7 @@ import json
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
-
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from sqlalchemy import text
 
 st.set_page_config(page_title="Gestione Turni REMS", layout="wide")
 
@@ -22,7 +18,6 @@ DB_OPERATORI = {
 }
 FASCE = ["09:00 - 14:00", "15:00 - 20:00"]
 MAX_SLOTS = 5
-FILE_DATI = "archivio_turni_rems_cloud.json"
 
 if "data_ancora" not in st.session_state:
     oggi = datetime.now()
@@ -46,13 +41,23 @@ dom_str = date_sett[-1].strftime('%d/%m/%Y')
 
 with col_testo:
     st.markdown(f"<h3 style='text-align:center; font-family:Arial;'>📅 SETTIMANA DAL {lun_str} AL {dom_str}</h3>", unsafe_allow_html=True)
+
+# Connessione locale/cloud protetta di Streamlit
+conn = st.connection("local_db", type="sql", url="sqlite:///archivioremsproteg.db")
+
+with conn.session as session:
+    session.execute(text("CREATE TABLE IF NOT EXISTS turni (chiave TEXT PRIMARY KEY, operatore TEXT);"))
+    session.commit()
+
 def carica_turni_settimana():
-    if os.path.exists(FILE_DATI):
-        try:
-            with open(FILE_DATI, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception: pass
-    return {}
+    dati = {}
+    try:
+        df = conn.query("SELECT chiave, operatore FROM turni;", ttl=0)
+        if df is not None and not df.empty:
+            for _, row in df.iterrows():
+                dati[str(row["chiave"])] = str(row["operatore"])
+    except Exception: pass
+    return dati
 
 archivio_globale = carica_turni_settimana()
 lista_ops = ["- Vuoto -"] + list(DB_OPERATORI.keys())
@@ -64,15 +69,12 @@ def salva_turno_callback(ch_w, dt_g, fas, sl):
     scelta = st.session_state[ch_w]
     tag_f = "mattino" if "09:00" in fas else "pomeriggio"
     chiave_unica = f"{dt_g}_{tag_f}_{sl}"
-    db = carica_turni_settimana()
-    if scelta != "- Vuoto -":
-        db[chiave_unica] = scelta
-    else:
-        if chiave_unica in db: del db[chiave_unica]
-    try:
-        with open(FILE_DATI, "w", encoding="utf-8") as f:
-            json.dump(db, f, ensure_ascii=False, indent=4)
-    except Exception: pass
+    
+    with conn.session as session:
+        session.execute(text("DELETE FROM turni WHERE chiave = :ch;"), {"ch": chiave_unica})
+        if scelta != "- Vuoto -":
+            session.execute(text("INSERT INTO turni (chiave, operatore) VALUES (:ch, :op);"), {"ch": chiave_unica, "op": scelta})
+        session.commit()
 
 dati_turni = {dt.strftime("%Y-%m-%d"): {f: ["- Vuoto -"] * MAX_SLOTS for f in FASCE} for dt in date_sett}
 for k, operatore_nome in archivio_globale.items():
@@ -103,6 +105,7 @@ for idx, dt in enumerate(date_sett):
                     label=ch_widget, options=lista_ops, index=def_idx, key=ch_widget,
                     label_visibility="collapsed", on_change=salva_turno_callback, args=(ch_widget, k_g, fas, s)
                 )
+
 st.markdown("<br/><hr/>", unsafe_allow_html=True)
 st.subheader("🖨️ Centro Stampa Documenti")
 tab1, tab2 = st.tabs(["👁️ Visualizza Tabellone Settimanale", "📊 Visualizza Report Ore"])
