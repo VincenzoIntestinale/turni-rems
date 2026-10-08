@@ -159,10 +159,10 @@ elements_rep.append(Paragraph(f"REPORT - PROGRAMMAZIONE TURNI REMS - DAL {lun_st
 headers_pdf = [Paragraph("OPERATORE", h_st_rep), Paragraph("ORE S.", h_st_rep), Paragraph("PREV.", h_st_rep), Paragraph("EFF.", h_st_rep), Paragraph("GIORNI IMPIEGATI", h_st_rep), Paragraph("ORE TOT.", h_st_rep)]
 data_pdf = [headers_pdf]
 for op, (ore_g, da_f) in DB_OPERATORI.items():
-reg = t_c[op]
+    reg = t_c[op]
 stringa_g = ", ".join(g_i[op]) if g_i[op] else "-"
 if reg > 0:
-data_pdf.append([
+    data_pdf.append([
 Paragraph(op, ParagraphStyle('L', fontName='Helvetica', fontSize=9, alignment=0)),
 Paragraph(str(ore_g), c_st_rep), Paragraph(str(da_f), c_st_rep), Paragraph(str(reg), c_st_rep),
 Paragraph(stringa_g, c_st_rep), Paragraph(str(reg * ore_g) + " ore", ParagraphStyle('B', fontName='Helvetica-Bold', fontSize=9, alignment=1))
