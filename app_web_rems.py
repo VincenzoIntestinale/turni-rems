@@ -59,7 +59,9 @@ def carica_turni_settimana():
                     return json.load(f)
             except Exception: pass
         return {}
-        url = "https://" + "://github.com" + f"{REPO_GITHUB}/contents/{FILE_DATI}"
+    # FORMULA INDISTRUTTIBILE: Unione blindata di caratteri per forzare la rotta API ufficiale
+    rotta_api = "ht" + "tps://" + "ap" + "i.g" + "ith" + "ub.c" + "om/r" + "epos/"
+    url = f"{rotta_api}{REPO_GITHUB}/contents/{FILE_DATI}"
     headers = {"Authorization": f"token {TOKEN_GITHUB}"}
     try:
         res = requests.get(url, headers=headers)
@@ -82,7 +84,9 @@ def invia_archivio_github(nuovo_db):
                 json.dump(nuovo_db, f, ensure_ascii=False, indent=4)
         except Exception: pass
         return
-        url = "https://" + "://github.com" + f"{REPO_GITHUB}/contents/{FILE_DATI}"
+    # FORMULA INDISTRUTTIBILE: Unione blindata di caratteri per forzare la rotta API ufficiale
+    rotta_api = "ht" + "tps://" + "ap" + "i.g" + "ith" + "ub.c" + "om/r" + "epos/"
+    url = f"{rotta_api}{REPO_GITHUB}/contents/{FILE_DATI}"
     headers = {"Authorization": f"token {TOKEN_GITHUB}"}
     sha = None
     try:
