@@ -59,7 +59,7 @@ def carica_turni_settimana():
                     return json.load(f)
             except Exception: pass
         return {}
-    url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
+        url = "https://" + "://github.com" + f"{REPO_GITHUB}/contents/{FILE_DATI}"
     headers = {"Authorization": f"token {TOKEN_GITHUB}"}
     try:
         res = requests.get(url, headers=headers)
@@ -82,7 +82,7 @@ def invia_archivio_github(nuovo_db):
                 json.dump(nuovo_db, f, ensure_ascii=False, indent=4)
         except Exception: pass
         return
-    url = f"https://github.com{REPO_GITHUB}/contents/{FILE_DATI}"
+        url = "https://" + "://github.com" + f"{REPO_GITHUB}/contents/{FILE_DATI}"
     headers = {"Authorization": f"token {TOKEN_GITHUB}"}
     sha = None
     try:
