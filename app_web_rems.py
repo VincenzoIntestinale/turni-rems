@@ -20,9 +20,7 @@ DB_OPERATORI = {
     "MICHELA AIELLO": (5, 5), "MICHELE CARUSONE": (5, 5), 
     "NELLO ROMANUCCI": (5, 5), "PAOLA DE PASCALE": (5, 3), 
     "VALENTINA PEREZ": (5, 1), "VALENTINA ROCCO": (3, 3), 
-    "VINCENZO INTESTINALE": (3, 3)
-}
-FASCE = ["09:00 - 14:00", "15:00 - 20:00"]
+    "VINCENZO INTESTINALE": (3, 3), "MICHELA SEPULVERES": (3, 3)}
 MAX_SLOTS = 5
 FILE_DATI = "archivio_turni_rems_cloud.json"
 
